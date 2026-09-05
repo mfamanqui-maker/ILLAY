@@ -56,6 +56,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
                 }]
             }
             await coneccion();
+            text.setText('Iniciando Batalla...');
             enviarMensaje({ type: 'join_room', data: { equipo: equipo } });
             const configuracionDelRival = await esperar('room_created');
             console.log(configuracionDelRival);
