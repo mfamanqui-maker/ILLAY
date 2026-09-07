@@ -1,0 +1,37 @@
+{
+  "nombre": "Molde001 - arena 5x5 simetrica",
+  "configTablero": {
+    "filas": 5,
+    "columnas": 5,
+    "casillaArquetipo": "cesped",
+    "tamaño": 400
+  },
+  "casillasEspeciales": [
+    { "arquetipo": "vacio", "posicion": { "x": 3, "y": 3 } }
+  ],
+  "equipos": {
+    "Aliados": [
+      { "id": 1, "arquetipo": "lumel", "invetario": ["brebaje", "Trampa"], "nivel": 5, "posicion": { "x": 1, "y": 1 } },
+      { "id": 2, "arquetipo": "brunn", "invetario": [], "nivel": 3, "posicion": { "x": 2, "y": 3 } },
+      { "id": 3, "arquetipo": "lumel", "invetario": ["brebaje", "Trampa"], "nivel": 5, "posicion": { "x": 1, "y": 5 } }
+    ],
+    "Enemigos": [
+      { "id": 4, "arquetipo": "soldado1", "invetario": [], "nivel": 5, "posicion": { "x": 5, "y": 1 } },
+      { "id": 5, "arquetipo": "soldado1", "invetario": [], "nivel": 5, "posicion": { "x": 4, "y": 3 } },
+      { "id": 6, "arquetipo": "soldado1", "invetario": [], "nivel": 5, "posicion": { "x": 5, "y": 5 } }
+    ]
+  },
+  "reglasExtra": {
+    "tiempoDeReflexion": 100000,
+    "condicionesVictoriaExtra": "eliminar al equipo contrario",
+    "clima": "soleado",
+    "retiradas": true,
+    "muertesPermanentes": true,
+    "gestiondelGuion": "porVelocidad",
+    "destino": {
+      "victoria": { "key": "globalMap", "x": 222, "y": 690 },
+      "derrota": { "key": "globalMap", "x": 222, "y": 690 },
+      "empate": { "key": "globalMap", "x": 222, "y": 690 }
+    }
+  }
+}

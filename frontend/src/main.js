@@ -1,11 +1,8 @@
-import MenuScene from './scenes/MenuScene.js';
-import GlobalMapScene from './scenes/maps/globalMapScene.js';
-import HouseMapScene from './scenes/maps/houseMapScene.js';
-import ShopMapScene from './scenes/maps/shopMapScene.js';
-import Vista from './classes/battle/vista.js';
-import tableroScene from './scenes/battles/tableroScene.js';
-import entidadScene from './scenes/battles/entidadScene.js';
-import CharacterSelectScene from './scenes/battles/characterSelectScene.js';
+import MenuScene from './MenuScene.js';
+import GlobalMapScene from './maps/globalMapScene.js';
+import HouseMapScene from './maps/houseMapScene.js';
+import ShopMapScene from './maps/shopMapScene.js';
+import CharacterSelectScene from './battle/characterSelectScene.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -36,10 +33,10 @@ const config = {
     HouseMapScene,
 
     //══════════════════Escenas de batalla══════════════════
+    // Las escenas de batalla ya no se listan aqui. El battle system las
+    // registra en caliente cuando arranca una batalla: basta con llamar a
+    // iniciarBatalla(game, molde) de src/battle/vista.js. Ver spect 004.
     CharacterSelectScene,
-    Vista,
-    tableroScene,
-    entidadScene,
   ],
 }
 const game = new Phaser.Game(config);
