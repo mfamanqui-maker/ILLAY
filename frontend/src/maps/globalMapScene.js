@@ -6,14 +6,17 @@ export default class GlobalMapScene extends BaseScene {
   }
 
   preload() {
+    //this.load.audio('music', '../assets/song/WIP2.ogg');
     this.cargarAssets();
     this.load.tilemapTiledJSON('global', 'assets/maps/globalMap.tmj');
-  }
+  } 
 
   create() {
     // Tilemap con dos tilesets
     const map = this.make.tilemap({ key: 'global' });
     const tileset = map.addTilesetImage('sin textura', 'tileset');
+    //this.sound.play('music');
+
 
     const ground = map.createLayer('ground', tileset);
     const wall = map.createLayer('walls', tileset, 0, 0);

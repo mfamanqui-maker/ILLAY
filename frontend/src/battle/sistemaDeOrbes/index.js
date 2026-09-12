@@ -7,7 +7,7 @@
  * reorganizar la carpeta por dentro no obligue a tocar a los consumidores.
  */
 
-export { default as SistemaDeOrbes, claveIconoAccion, rutaIconoNormalizada } from './orbes.js';
+export { default as SistemaDeOrbes, claveIconoAccion, rutaIconoNormalizada, precargarOrbes } from './orbes.js';
 export {
   pausarAnimaciones,
   asegurarTexturaParticula,

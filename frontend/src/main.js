@@ -3,6 +3,7 @@ import GlobalMapScene from './maps/globalMapScene.js';
 import HouseMapScene from './maps/houseMapScene.js';
 import ShopMapScene from './maps/shopMapScene.js';
 import CharacterSelectScene from './battle/characterSelectScene.js';
+import vista from './battle/vista.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -37,6 +38,7 @@ const config = {
     // registra en caliente cuando arranca una batalla: basta con llamar a
     // iniciarBatalla(game, molde) de src/battle/vista.js. Ver spect 004.
     CharacterSelectScene,
+    vista,
   ],
 }
 const game = new Phaser.Game(config);

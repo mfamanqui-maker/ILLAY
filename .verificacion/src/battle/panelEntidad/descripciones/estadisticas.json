@@ -1,0 +1,6 @@
+{
+  "ATK": "Fuerza con la que la entidad inflige daño fisico al atacar.",
+  "DEF": "Reduce el daño fisico recibido por la entidad.",
+  "VELOCIDAD": "Determina el orden de turnos: mayor velocidad actua antes.",
+  "NIVEL": "Indicador general del poder y experiencia de la entidad."
+}

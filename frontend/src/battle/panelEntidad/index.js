@@ -1,6 +1,7 @@
 export {
   abrirPanelEntidad,
   precargarDescripcionesPanelEntidad,
+  precargarAssetsPanelEntidad,
 } from './panelEntidad.js';
 
 export {
@@ -14,4 +15,7 @@ export {
   LISTAS,
   claveTexturaImagen,
   obtenerDescripcion,
+  ICONO_FALLBACK,
+  CLAVE_ICONO_FALLBACK,
+  TINTES_CATEGORIA,
 } from './panelEntidadConfig.js';

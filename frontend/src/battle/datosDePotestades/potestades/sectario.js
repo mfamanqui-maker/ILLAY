@@ -3,14 +3,307 @@
  *
  * SPECT: docs/spects/spect006.md
  *
- * QUE SERA: una clase por potestad de esta familia, todas en este archivo.
- * Estadisticas, lista de acciones y animaciones. Nada mas.
- *
- * ESTADO: vacio. No existe ninguna potestad de esta familia en el codigo
- * viejo. Hueco reservado: system/characterSelectScene.js ya ofrece 'Sectario'
- * como opcion del selector.
- *
- * Usar campesino.js como plantilla.
+ * Estadisticas, lista de acciones como datos, y el circulo de prueba dentro
+ * de esta clase. El trigger de bloquear acciones esta declarado como dato;
+ * quien lo aplica es el guion, no esta clase.
  */
 
-export const POTESTADES_SECTARIO = [];
+const ICONOS = 'assets/images/battle/Iconos/accion';
+
+const LADO = 360;
+const FOTOGRAMAS = 8;
+const RADIO_BASE = 150;
+const AMPLITUD = 7;
+const GROSOR_ANILLO = 12;
+const ANILLO_POR_BANDO = { Aliados: 0x7ed4ff, Enemigos: 0xff6b6b };
+const ANILLO_POR_DEFECTO = 0xf5d68a;
+
+function aCss(entero) {
+  return `#${(Number(entero) >>> 0).toString(16).padStart(6, '0')}`;
+}
+
+const PARTICULA = 'particula_punto';
+
+function asegurarParticula(escena) {
+  if (!escena?.textures || escena.textures.exists(PARTICULA)) return PARTICULA;
+  const textura = escena.textures.createCanvas(PARTICULA, 8, 8);
+  const ctx = textura.getContext();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(4, 4, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  textura.refresh();
+  return PARTICULA;
+}
+
+function puntoDe(contexto, potestad) {
+  const t = contexto?.tamanoCasilla ?? 400;
+  const d = contexto?.destino;
+  if (d?.x != null && d?.y != null) {
+    if (d.x <= 32 && d.y <= 32) {
+      return { x: (d.x - 1) * t + t / 2, y: (d.y - 1) * t + t / 2 - 80 };
+    }
+    return { x: d.x, y: d.y };
+  }
+  if (contexto?.objetivo?.sprite) {
+    return { x: contexto.objetivo.sprite.x, y: contexto.objetivo.sprite.y };
+  }
+  if (potestad?.sprite) return { x: potestad.sprite.x, y: potestad.sprite.y };
+  return { x: 0, y: 0 };
+}
+
+function explotar(escena, x, y, tint, cantidad = 16, lifespan = 400) {
+  if (!escena?.add) return;
+  const emisor = escena.add.particles(x, y, PARTICULA, {
+    speed: { min: 40, max: 140 },
+    lifespan,
+    scale: { start: 0.45, end: 0 },
+    tint,
+    emitting: false,
+  });
+  emisor.setDepth(12);
+  emisor.explode(cantidad);
+  escena.time.delayedCall(lifespan + 50, () => emisor.destroy());
+}
+
+function tweenPromise(escena, config) {
+  return new Promise((resolve) => {
+    if (!escena?.tweens) return resolve();
+    escena.tweens.add({ ...config, onComplete: resolve });
+  });
+}
+
+export class Sectario {
+  static arquetipo = 'Sectario';
+  static color = 0xf08080;
+  static spritesheet = { clave: 'circulo_sectario', archivo: null, ancho: LADO, alto: LADO };
+
+  constructor(datos, bando = 'Aliados') {
+    this.datos = datos ?? {};
+    this.id = this.datos.id;
+    this.bando = bando;
+    this.sprite = null;
+    this.estadisticas = null;
+    this.constantes = null;
+    this.listaDeAcciones = null;
+    this.animaciones = null;
+    this.transformado = false;
+    this.calcularEstadisticas();
+  }
+
+  get arquetipo() {
+    return this.constructor.arquetipo;
+  }
+
+  get nivel() {
+    return Number(this.datos?.nivel ?? 1);
+  }
+
+  get inventario() {
+    return this.datos?.invetario ?? [];
+  }
+
+  calcularEstadisticas() {
+    const previas = this.estadisticas ?? {};
+    const nivel = this.nivel;
+    this.estadisticas = {
+      hp: 7,
+      anticristo: 0,
+      velocidad: 2,
+      dano: 3,
+      rango: 3,
+      ...previas,
+    };
+    this.constantes = {
+      hpMax: 5 + 2 * nivel,
+      accionismo: 1,
+      zombiosis: 0,
+      triggerArquetipo: {
+        arquetipo: 'Bloquear acciones',
+        accionesBloqueadas: ['atacar', 'maldicion'],
+        condicion: { estadistica: 'anticristo', operador: '>', valor: 6 },
+      },
+    };
+    this.calcularAcciones();
+    return this.estadisticas;
+  }
+
+  calcularAcciones() {
+    const stats = this.estadisticas;
+    const nivel = this.nivel;
+    this.listaDeAcciones = {
+      habilidades: [
+        { nombre: 'ritual', velocidad: 20, condicional: true, ruta: `${ICONOS}/S_Shadow05.png` },
+        { nombre: 'pacto', velocidad: 25, condicional: false, ruta: `${ICONOS}/S_Shadow09.png` },
+        { nombre: 'atacar', rango: stats.rango, velocidad: 15 + (nivel - 1), condicional: true, ruta: `${ICONOS}/S_Sword01.png` },
+        { nombre: 'maldicion', rango: 3, velocidad: 18, condicional: stats.anticristo > 0, ruta: `${ICONOS}/S_Shadow13.png` },
+      ],
+      objetos: [],
+      movimiento: [
+        { nombre: 'moverse', rango: 1, velocidad: 10, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` },
+      ],
+    };
+    return this.listaDeAcciones;
+  }
+
+  _claveDeTextura() {
+    return `circulo_${this.constructor.arquetipo.toLowerCase()}_${String(this.bando).toLowerCase()}`;
+  }
+
+  AnimacionEstatica(escena) {
+    if (!escena?.textures) return null;
+    const clave = this._claveDeTextura();
+    if (escena.textures.exists(clave)) return clave;
+
+    const textura = escena.textures.createCanvas(clave, LADO, LADO);
+    if (!textura) return null;
+    const ctx = textura.getContext();
+    if (this.bando === 'Aliados') {
+      ctx.translate(LADO, 0);
+      ctx.scale(-1, 1);
+    }
+    const trazo = aCss(this.constructor.color);
+    const cx = LADO / 2;
+    const cy = LADO / 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, RADIO_BASE, 0, Math.PI * 2);
+    ctx.fillStyle = '#141414';
+    ctx.fill();
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = trazo;
+    ctx.stroke();
+    ctx.fillStyle = trazo;
+    ctx.font = 'bold 42px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this.constructor.arquetipo, cx, cy);
+    textura.refresh();
+    return clave;
+  }
+
+  construirAnimaciones() {
+    return [];
+  }
+
+  obtenerConfigAnimacionEstatica() {
+    return {
+      plantillaSprite: { textureKey: this._claveDeTextura(), frame: 0, escala: 1 },
+      animKey: null,
+    };
+  }
+
+  prepararAnimaciones(escena) {
+    asegurarParticula(escena);
+    this.animaciones = {
+      movimiento: (ctx) => this._animMovimiento(ctx),
+      serCurado: (ctx) => this._animSerCurado(ctx),
+      ritual: (ctx) => this._animRitual(ctx),
+      proteccion: (ctx) => this._animProteccion(ctx),
+      recibirDano: (ctx) => this._animRecibirDano(ctx),
+      morir: (ctx) => this._animMorir(ctx),
+      transformacion: (ctx) => this._animTransformacion(ctx),
+      atacarTransformado: (ctx) => this._animAtacarTransformado(ctx),
+      maldecirTransformado: (ctx) => this._animMaldecirTransformado(ctx),
+    };
+    return this.animaciones;
+  }
+
+  _animMovimiento(contexto) {
+    const escena = contexto?.escena;
+    const destino = puntoDe(contexto, this);
+    if (!this.sprite || !escena) return Promise.resolve();
+    return tweenPromise(escena, { targets: this.sprite, x: destino.x, y: destino.y, duration: 260, ease: 'Sine.easeInOut' });
+  }
+
+  _animSerCurado(contexto) {
+    const escena = contexto?.escena;
+    const punto = puntoDe(contexto, this);
+    explotar(escena, punto.x, punto.y, 0x9be36b, 22, 520);
+    const blanco = contexto?.objetivo?.sprite ?? this.sprite;
+    return tweenPromise(escena, { targets: blanco, alpha: 0.7, yoyo: true, duration: 160 });
+  }
+
+  _animRitual(contexto) {
+    const escena = contexto?.escena;
+    const origen = this.sprite ?? { x: 0, y: 0 };
+    if (!escena?.add) return Promise.resolve();
+    const circulo = escena.add.particles(origen.x, origen.y + 30, PARTICULA, {
+      speed: { min: 6, max: 24 },
+      lifespan: 700,
+      angle: { min: 0, max: 360 },
+      tint: 0x3b0d12,
+      scale: { start: 0.45, end: 0 },
+      emitting: false,
+    });
+    circulo.setDepth(6);
+    circulo.explode(30);
+    escena.time.delayedCall(750, () => circulo.destroy());
+    return tweenPromise(escena, { targets: this.sprite, scale: 1.14, yoyo: true, duration: 240 });
+  }
+
+  _animProteccion(contexto) {
+    const escena = contexto?.escena;
+    const origen = this.sprite ?? { x: 0, y: 0 };
+    if (!escena?.add) return Promise.resolve();
+    const anillo = escena.add.particles(origen.x, origen.y, PARTICULA, {
+      speed: { min: 8, max: 36 },
+      lifespan: 500,
+      angle: { min: 0, max: 360 },
+      tint: 0x8b1e1e,
+      scale: { start: 0.4, end: 0 },
+      emitting: false,
+    });
+    anillo.setDepth(12);
+    anillo.explode(26);
+    escena.time.delayedCall(550, () => anillo.destroy());
+    return tweenPromise(escena, { targets: this.sprite, scale: 1.1, yoyo: true, duration: 160 });
+  }
+
+  _animRecibirDano(contexto) {
+    const escena = contexto?.escena;
+    if (!this.sprite) return Promise.resolve();
+    explotar(escena, this.sprite.x, this.sprite.y, 0xff4d4d, 14, 300);
+    this.sprite.setTint(0xff4d4d);
+    return tweenPromise(escena, { targets: this.sprite, x: this.sprite.x + 12, yoyo: true, duration: 70, repeat: 2 })
+      .then(() => { this.sprite?.clearTint(); });
+  }
+
+  _animMorir(contexto) {
+    const escena = contexto?.escena;
+    if (!this.sprite) return Promise.resolve();
+    explotar(escena, this.sprite.x, this.sprite.y, this.constructor.color, 28, 600);
+    return tweenPromise(escena, { targets: this.sprite, alpha: 0, scale: 0.4, duration: 360 })
+      .then(() => { this.sprite?.setVisible(false); });
+  }
+
+  _animTransformacion(contexto) {
+    const escena = contexto?.escena;
+    if (!this.sprite) return Promise.resolve();
+    this.transformado = true;
+    explotar(escena, this.sprite.x, this.sprite.y, 0x5a0a12, 32, 700);
+    this.sprite.setTint(0x3b0d12);
+    return tweenPromise(escena, { targets: this.sprite, scale: 1.35, duration: 320, ease: 'Back.easeOut' });
+  }
+
+  _animAtacarTransformado(contexto) {
+    if (!this.transformado) return Promise.resolve();
+    const escena = contexto?.escena;
+    const origen = this.sprite ?? { x: 0, y: 0 };
+    const destino = puntoDe(contexto, this);
+    explotar(escena, origen.x, origen.y, 0x5a0a12, 20, 340);
+    explotar(escena, destino.x, destino.y, 0xff4d4d, 22, 380);
+    return tweenPromise(escena, { targets: this.sprite, x: origen.x + (destino.x - origen.x) * 0.22, y: origen.y + (destino.y - origen.y) * 0.22, yoyo: true, duration: 140 });
+  }
+
+  _animMaldecirTransformado(contexto) {
+    if (!this.transformado) return Promise.resolve();
+    const escena = contexto?.escena;
+    const destino = puntoDe(contexto, this);
+    explotar(escena, destino.x, destino.y, 0x2a0610, 24, 640);
+    const blanco = contexto?.objetivo?.sprite;
+    if (blanco) blanco.setTint(0x5a0a12);
+    return tweenPromise(escena, { targets: blanco ?? this.sprite, alpha: 0.55, yoyo: true, duration: 220 });
+  }
+}
+
+export const POTESTADES_SECTARIO = [Sectario];

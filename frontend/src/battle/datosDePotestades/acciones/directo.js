@@ -17,34 +17,9 @@
  *   contexto.tarea.potestad  quien la lanza
  *   contexto.tablero         el array bidimensional
  *   contexto.escena          la escena del mundo
+ *   contexto.eventos         el emisor de PhaserMaster
  *
- * Rescatado de: familias/campesinos/lumel.js, familias/campesinos/brunn.js y
- * familias/realistas/soldado1.js (los tres borrados).
- *
- * ESTADO: esqueleto con rescate. Revisar contra el spect 006.
+ * ESTADO: vacio a proposito. Esta primera parte del spect 006 solo entrega
+ * datos para pintar. Las funciones de efecto llegan cuando el catalogo se
+ * construya.
  */
-
-// ─── RESCATE: lumel.js linea 85, brunn.js linea 78, soldado1.js linea 76. ────
-// Estaba escrita tres veces identica, una por personaje. Ahora es una sola y
-// lee el nivel de quien la lanza.
-
-export function descansar(objetivo, contexto) {
-  const lanzador = contexto.tarea.potestad;
-  const n = lanzador.datos.nivel;
-  lanzador.estadisticas.ataque += n + 5;
-}
-
-// ─── RESCATE: lumel.js lineas 93-98. ─────────────────────────────────────────
-// La version de soldado1 era un console.log de relleno; se descarta.
-
-export function dopar(objetivo, contexto) {
-  const lanzador = contexto.tarea.potestad;
-  lanzador.estadisticas.ulti = false;
-  contexto.eventos?.emit('doparActivado', { idPotestad: lanzador.id });
-}
-
-// ─── RESCATE: lumel.js linea 107, brunn.js linea 100, soldado1.js linea 95. ──
-
-export function tomarBebida(objetivo, contexto) {
-  contexto.tarea.potestad.estadisticas.hp += 30;
-}

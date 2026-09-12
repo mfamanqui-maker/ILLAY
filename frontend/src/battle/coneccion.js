@@ -41,6 +41,7 @@ let socket = null;
     y administra el estado de la coneccion.
 */
 export function coneccion() {
+    if (socket?.readyState === WebSocket.OPEN) return Promise.resolve();
     return new Promise((resolve, reject) => { 
         socket = new WebSocket('ws://localhost:8080');
         socket.addEventListener('open', () => {
@@ -63,7 +64,7 @@ export function coneccion() {
     @returns {Promise} - La promesa que resuelve cuando el mensaje es enviado.
 */
 export function enviarMensaje(mensaje) {
-    if (socket.readyState === WebSocket.OPEN) {
+    if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify(mensaje));
     } else {
         console.error('No se puede enviar mensaje, la coneccion no esta abierta');

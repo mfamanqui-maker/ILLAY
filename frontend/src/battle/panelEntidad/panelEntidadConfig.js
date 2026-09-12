@@ -174,6 +174,17 @@ export const DESCRIPCIONES = {
 
 export const ICONO_FALLBACK = 'assets/images/system/candle.png';
 
+/** Textura compartida de la vela. El panel y las orbes la tiñen por categoría. */
+export const CLAVE_ICONO_FALLBACK = 'iconoFallbackVela';
+
+export const TINTES_CATEGORIA = {
+  estadisticas: 0xf5d68a,
+  efectos: 0xc084fc,
+  movimiento: 0x8be66f,
+  habilidades: 0x7ed4ff,
+  objetos: 0xf5d36a,
+};
+
 export function claveTexturaImagen(ruta) {
   return `panelEntidad_img_${String(ruta).replace(/[^a-zA-Z0-9]+/g, '_')}`;
 }

@@ -1,39 +1,64 @@
-/**
- * vista.js — Puerta de entrada del battle system.
- *
- * SPECT: docs/spects/spect004.md
- *
- * QUE SERA: iniciar una batalla tiene que ser tan simple como llamar a una
- * funcion y pasarle un JSON. Este archivo registra las dos escenas de batalla
- * en un juego Phaser ya arrancado y lanza PhaserMaster. Nada mas.
- *
- * El JSON llega ya resuelto. Lo produce el multijugador (la configuracion que
- * mando el rival) o crearNiveles/ en modo historia. A este archivo le da igual
- * de donde venga.
- *
- * REGLA 3 DEL CONTRATO: las escenas no se listan en el main.js del colaborador.
- * Se anaden en caliente aqui, para que integrar el sistema cueste un solo
- * import.
- *
- * ESTADO: esqueleto funcional. Revisar contra el spect 004.
- */
+// Contexto de este js: este es un archibo de entrenada a la batalla. y ya w si necesitas iniciar una batalla, solo inicia esta escena y pasa el molde.
 
-import PhaserMaster from './PhaserMaster.js';
-import GenerarInterfaz from './generarInterfaz.js';
 
-export const CLAVE_ESCENA_MUNDO = 'PhaserMaster';
-export const CLAVE_ESCENA_HUD = 'interfazBatalla';
+// dato importante la batalla solo tiene 2 escenas: PhaserMaster(zoom, paneo, hover, clic) y GenerarInterfaz(paneles).
+import PhaserMaster, { CLAVE_ESCENA_MUNDO } from './PhaserMaster.js';
+import GenerarInterfaz, { CLAVE_ESCENA_HUD } from './generarInterfaz.js';
+
+export { CLAVE_ESCENA_MUNDO, CLAVE_ESCENA_HUD };
+
+const ESCENAS_DE_BATALLA = [
+  [CLAVE_ESCENA_MUNDO, PhaserMaster],
+  [CLAVE_ESCENA_HUD, GenerarInterfaz],
+];
+
 
 /**
- * @param {Phaser.Game} game - instancia viva del juego del colaborador.
- * @param {object} configuracion - molde de batalla ya resuelto.
+ * @param {Phaser.Game} game
+ * @param {object} configuracion molde ya resuelto
  */
 export function iniciarBatalla(game, configuracion) {
-  // La guarda no es adorno: registrar una clave que ya existe lanza excepcion,
-  // y eso pasa en cuanto el jugador vuelve al menu y entra a una segunda batalla.
-  if (!game.scene.getScene(CLAVE_ESCENA_MUNDO)) {
-    game.scene.add(CLAVE_ESCENA_MUNDO, PhaserMaster, false);
-    game.scene.add(CLAVE_ESCENA_HUD, GenerarInterfaz, false);
+  if (!game?.scene) {
+    throw new Error('[vista] iniciarBatalla necesita una instancia de Phaser.Game viva.');
+  }
+  if (!configuracion || typeof configuracion !== 'object') {
+    throw new Error('[vista] iniciarBatalla necesita el molde ya resuelto, no una clave.');
+  }
+
+  ESCENAS_DE_BATALLA.forEach(([clave, Escena]) => { // aqui se registran las escenas de batalla.
+    if (!game.scene.getScene(clave)) game.scene.add(clave, Escena, false);
+  });
+
+  // this.scene.start desde el lanzador lo apaga y cede el paso al mundo.
+  // game.scene.start solo enciende PhaserMaster y dejaria 'vista' viva.
+  const lanzador = game.scene.getScene('vista');
+  if (lanzador?.scene) {
+    lanzador.scene.start(CLAVE_ESCENA_MUNDO, configuracion);
+    return;
   }
   game.scene.start(CLAVE_ESCENA_MUNDO, configuracion);
+}
+
+/**
+ * Lanzador de prueba / modo historia. Resuelve Molde001 y arranca la batalla.
+ */
+export default class vista extends Phaser.Scene {
+  constructor() {
+    super({ key: 'vista' });
+    this.configuracion = null;
+  }
+  init(configuracion) {
+    this.configuracion = configuracion;
+  }
+  preload() {
+    this.load.json('Molde001', 'src/battle/AlmacenDeMoldes/Molde001.json');
+  } 
+
+  create() {
+    if (!this.configuracion?.nombre) {
+      this.configuracion = this.cache.json.get('Molde001');
+    }
+    iniciarBatalla(this.game, this.configuracion);
+    console.log('this.configuracion', this.configuracion);
+  }
 }

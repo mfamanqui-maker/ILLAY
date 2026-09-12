@@ -16,6 +16,8 @@
 
 ---
 
+
+
 ## Objetivo
 
 Reunir en un solo sitio todo lo que una potestad es: sus estadisticas, sus
@@ -40,10 +42,7 @@ frontend/src/battle/datosDePotestades/
   utilidadesDeSeleccion.js
 ```
 
-**Ya borrados:** toda la carpeta `classes/battle/familias/`. Incluye
-`aliadoEspecifico.js` y `enemigoEspecifico.js` (registros gemelos),
-`bases/baseCampesinos.js` y `bases/baseRealistas.js` (clases vacias cuyo unico
-metodo devolvia `true`), y los tres archivos de personaje.
+
 
 ## El cambio central: la accion se separa de la potestad
 
@@ -75,7 +74,9 @@ ejecutable al llegar.
 
 ## Contrato de cada archivo
 
-### potestades/&lt;familia&gt;.js
+
+
+### potestades/.js
 
 Una clase base de familia mas una clase por potestad, todas en el archivo de su
 familia. Cada clase de potestad declara:
@@ -90,14 +91,14 @@ potestad puede sobreescribir.
 
 Al final del archivo, `export const POTESTADES_<FAMILIA> = [...]`. El registro
 se construye solo a partir de esas listas: **anadir una potestad no debe
-obligar a tocar `IndexDePotestades.js`**.
+obligar a tocar** `IndexDePotestades.js`.
 
 `campesino.js` y `realista.js` ya estan rescatados. `mago.js`,
 `intelectual.js` y `sectario.js` estan vacios a proposito: el selector de
 `system/characterSelectScene.js` ya ofrece esas tres familias, y sin el archivo
 la opcion no se puede resolver.
 
-### acciones/&lt;tipo&gt;.js
+### acciones/.js
 
 Funciones sueltas. Firma unica:
 
@@ -117,23 +118,27 @@ rondas se quedaria esperando una respuesta que no llega.
 
 - `directo.js` — no necesita nada. Se envia como `..._Final`.
 - `directoEnemiga.js` — necesita un objetivo, que se pide al elegirla. Tambien
-  `..._Final`.
+`..._Final`.
 - `directoConfig1.js` — necesita saber que hizo el rival. Obliga a
-  `Enviar_Config_Acciones` (sin `_Final`) y a esperar respuesta.
+`Enviar_Config_Acciones` (sin `_Final`) y a esperar respuesta.
+
+
 
 ### IndexDePotestades.js
 
 Dos cosas y nada mas: el registro, y tres funciones de adaptacion.
 
-| Exporta | Que hace |
-| --- | --- |
-| `REGISTRO_POR_ARQUETIPO` | mapa arquetipo → clase, construido desde las listas de familia |
-| `resolverClase(datos)` | clase concreta, o error con el arquetipo que fallo |
-| `crearRegistro(equipos)` | instancia los dos bandos; devuelve `porId`, `todos`, `porBando` |
-| `normalizarConfiguracion(config, registro)` | el puente serializable: JSON plano → tareas |
-| `adaptarParaPanel(potestad, bando)` | la forma que espera `abrirPanelEntidad` |
-| `adaptarParaOrbes(potestad)` | las tres cadenas navegables con color y condicional |
-| `adaptarParaGuion(tarea)` | velocidad mas funcion resuelta desde `acciones/` |
+
+| Exporta                                     | Que hace                                                        |
+| ------------------------------------------- | --------------------------------------------------------------- |
+| `REGISTRO_POR_ARQUETIPO`                    | mapa arquetipo → clase, construido desde las listas de familia  |
+| `resolverClase(datos)`                      | clase concreta, o error con el arquetipo que fallo              |
+| `crearRegistro(equipos)`                    | instancia los dos bandos; devuelve `porId`, `todos`, `porBando` |
+| `normalizarConfiguracion(config, registro)` | el puente serializable: JSON plano → tareas                     |
+| `adaptarParaPanel(potestad, bando)`         | la forma que espera `abrirPanelEntidad`                         |
+| `adaptarParaOrbes(potestad)`                | las tres cadenas navegables con color y condicional             |
+| `adaptarParaGuion(tarea)`                   | velocidad mas funcion resuelta desde `acciones/`                |
+
 
 **El bando es un dato, no una clase.** Habia dos registros gemelos, identicos
 salvo el nombre. En multijugador las potestades del rival son de las mismas
@@ -153,62 +158,50 @@ Funciones puras. Regla 8: cero imports de Phaser. Ya rescatado casi entero de
 
 ## Trabajo pendiente concreto
 
-1. **Clasificar las acciones que no encajan.** `curar` apunta a un aliado y
-   `atacar` a un enemigo: las dos necesitan lo mismo, un objetivo, pero el
-   archivo se llama `directoEnemiga`. Y `moverse` y `ponerTrampa` piden una
-   **casilla**, que no tiene archivo. Estan rescatadas en `directoEnemiga.js`
-   bajo un bloque marcado, esperando la decision. Decidir si el criterio es
-   "que informacion falta" (y entonces se parte en objetivo y casilla) o si se
-   deja como esta.
+**Fase 1: Implementar las potestades y acciones.**:
+  - Implementar las potestades y acciones.
+  - Implementar las animaciones. (cambios de color, particulas, parpadear, etc)
 
-2. **Completar `normalizarConfiguracion`.** El rescate busca la accion dentro
-   de la potestad; hay que resolverla contra el catalogo de `acciones/` y
-   propagar el campo `azar` de la regla 5.
+**Fase 2: .*Implementar el index de potestades**:
+  - Implementar los registros de potestades.
+  - crear objetos que puedan ser usados para pintar las potestades en el tablero
 
-3. **Escribir `adaptarParaOrbes` y `adaptarParaGuion`.** Solo esta hecha
-   `adaptarParaPanel`.
-
-4. **Resolver el azar.** Ninguna accion actual tira dados, pero el campo existe
-   porque la regla 5 lo exige. Definir la forma de `azar` antes de que haga
-   falta: cuando llegue la primera accion aleatoria, el protocolo ya tiene que
-   aceptarla.
-
-5. **Dos bugs heredados de `realista.js`,** marcados en el archivo: `curar`
-   exige `curas > 0` con `curas` fijado a `0`, asi que no se podia usar nunca;
-   y `dopar` condiciona sobre `stats.ulti`, que esa familia no define, con lo
-   que la condicion valia `undefined`. Se han rescatado tal cual para no
-   perder los numeros. Decidir que hacen.
 
 ## Invariantes
 
 - Una accion nunca se guarda como funcion en la configuracion de turno. Solo
-  su nombre.
+su nombre.
 - `condicional` se recalcula cada vez que cambian las estadisticas. Es un valor
-  derivado, no un dato.
+derivado, no un dato.
 - Un arquetipo desconocido lanza error con el nombre que fallo. No devuelve
-  `undefined` ni una clase por defecto: un error temprano y claro cuesta menos
-  que una potestad invisible.
+`undefined` ni una clase por defecto: un error temprano y claro cuesta menos
+que una potestad invisible.
 - Los ids son unicos entre los dos bandos, no por bando.
 - `utilidadesDeSeleccion.js` no importa Phaser. Ni una vez.
+
+
 
 ## Decisiones ya tomadas
 
 - Una clase por potestad, dentro del archivo de su familia. Ni un archivo por
-  potestad ni una sola clase con todo.
+potestad ni una sola clase con todo.
 - Las acciones se agrupan por el input que necesitan, no por su efecto.
 - Colocar en casilla ya no es de la potestad: se fue a `PotestadesTablero`. En
-  el codigo viejo vivia en `BaseGeneral`, y por eso cada clase de personaje
-  arrastraba Phaser hasta la raiz de la jerarquia.
+el codigo viejo vivia en `BaseGeneral`, y por eso cada clase de personaje
+arrastraba Phaser hasta la raiz de la jerarquia.
 - La clave de inventario esta escrita `invetario` en los moldes. Se conserva:
-  cambiarla rompe los moldes existentes sin ganar nada.
+cambiarla rompe los moldes existentes sin ganar nada.
+
+
 
 ## Criterio de cierre
 
 - Anadir una potestad nueva se hace tocando un solo archivo: el de su familia.
 - Una configuracion `{ id, nombreDeAccion, objetivo, azar }` sobrevive a
-  `JSON.stringify` y `JSON.parse` y sigue siendo ejecutable despues de
-  `normalizarConfiguracion`.
+`JSON.stringify` y `JSON.parse` y sigue siendo ejecutable despues de
+`normalizarConfiguracion`.
 - `atacar` esta escrita **una vez** para todo el juego, no una por personaje.
 - `grep -c "import" utilidadesDeSeleccion.js` da cero.
 - `grep -E "panelEntidad|sistemaDeOrbes|guionSincrono" IndexDePotestades.js` no
-  encuentra nada.
+encuentra nada.
+

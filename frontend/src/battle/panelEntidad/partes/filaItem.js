@@ -1,13 +1,19 @@
 /**
  * Fila individual para listas: [icono] NOMBRE  CANTIDAD.
- * El icono es opcional. Si la imagen no está cargada se intenta cargar dinámicamente.
- * Toda la fila tiene un hitArea rectangular y dispara onHover/onLeave.
+ * Sin `imagen` de acción se usa la vela. `item.tinte` la colorea por categoría.
  *
  * Devuelve un container ya posicionado en (0, 0) relativo al padre que lo agregue.
  */
 
 import { crearTexto } from '../GenerarTexto/index.js';
-import { COLORES, DEPTHS, LISTAS, claveTexturaImagen } from '../panelEntidadConfig.js';
+import {
+  COLORES,
+  DEPTHS,
+  LISTAS,
+  claveTexturaImagen,
+  ICONO_FALLBACK,
+  CLAVE_ICONO_FALLBACK,
+} from '../panelEntidadConfig.js';
 
 function cargarImagen(scene, ruta, onCargada) {
   if (!ruta) return;
@@ -21,6 +27,27 @@ function cargarImagen(scene, ruta, onCargada) {
     if (scene.textures.exists(clave)) onCargada(clave);
   });
   if (!scene.load.isLoading()) scene.load.start();
+}
+
+function colocarIcono(scene, container, item, x, y) {
+  const pintar = (clave) => {
+    if (!container.active || !scene.textures.exists(clave)) return;
+    const iconoImg = scene.add.image(x, y, clave);
+    iconoImg.setDisplaySize(LISTAS.iconoTam, LISTAS.iconoTam);
+    iconoImg.setDepth(DEPTHS.contenido + 2);
+    if (item?.tinte != null) iconoImg.setTint(item.tinte);
+    container.add(iconoImg);
+  };
+
+  if (item?.imagen) {
+    cargarImagen(scene, item.imagen, pintar);
+    return;
+  }
+  if (scene.textures.exists(CLAVE_ICONO_FALLBACK)) {
+    pintar(CLAVE_ICONO_FALLBACK);
+    return;
+  }
+  cargarImagen(scene, ICONO_FALLBACK, pintar);
 }
 
 export function crearFilaItem(scene, opciones) {
@@ -44,26 +71,18 @@ export function crearFilaItem(scene, opciones) {
   separador.setOrigin(0, 0);
   container.add(separador);
 
-  const tieneIcono = Boolean(item?.imagen);
   const marcoTam = LISTAS.iconoMarcoTam;
   const marcoX = paddingX;
   const marcoY = (altoFila - marcoTam) / 2;
 
-  if (tieneIcono) {
-    const marco = scene.add.rectangle(marcoX, marcoY, marcoTam, marcoTam, COLORES.iconoMarcoVacio, 1);
-    marco.setOrigin(0, 0);
-    marco.setStrokeStyle(2, COLORES.borde, 0.7);
-    container.add(marco);
+  const marco = scene.add.rectangle(marcoX, marcoY, marcoTam, marcoTam, COLORES.iconoMarcoVacio, 1);
+  marco.setOrigin(0, 0);
+  marco.setStrokeStyle(2, COLORES.borde, 0.7);
+  container.add(marco);
 
-    cargarImagen(scene, item.imagen, (clave) => {
-      const iconoImg = scene.add.image(marcoX + marcoTam / 2, marcoY + marcoTam / 2, clave);
-      iconoImg.setDisplaySize(LISTAS.iconoTam, LISTAS.iconoTam);
-      iconoImg.setDepth(DEPTHS.contenido + 2);
-      container.add(iconoImg);
-    });
-  }
+  colocarIcono(scene, container, item, marcoX + marcoTam / 2, marcoY + marcoTam / 2);
 
-  const textoX = tieneIcono ? marcoX + marcoTam + LISTAS.gapIconoTexto : paddingX;
+  const textoX = marcoX + marcoTam + LISTAS.gapIconoTexto;
   const nombre = crearTexto(scene, String(item?.nombre ?? ''), {
     x: textoX,
     y: altoFila / 2,

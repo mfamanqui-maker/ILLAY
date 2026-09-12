@@ -6,6 +6,8 @@
  4. Llamar a la funcion validarMolde(molde) para validar el molde.
  5. Llamar a la funcion alterarMolde(molde, opciones) para alterar el molde. (si se desea generar niveles aleatorios)
  6. Llamar a la funcion generarSerie(molde, cantidad, opciones) para generar una serie de moldes.
+ aunque la funcion de batalla es general este archibo sirvira para generar los moldes de la batalla.
+ aunque este archibo es un poco insano xd
 */
 
 import { resolverClase } from '../datosDePotestades/IndexDePotestades.js';

@@ -22,6 +22,8 @@ import {
   LAYOUT,
   PANEL,
   DESCRIPCIONES,
+  ICONO_FALLBACK,
+  CLAVE_ICONO_FALLBACK,
 } from './panelEntidadConfig.js';
 import { crearNombre, crearVendasNavegacion } from './partes/header.js';
 import { crearLadoIzquierdo } from './partes/ladoIzquierdo.js';
@@ -36,6 +38,28 @@ export function precargarDescripcionesPanelEntidad(scene) {
       scene.load.json(meta.clave, meta.ruta);
     }
   });
+}
+
+/** Fondo, vendas, Base.png, vela y JSON de tooltips. El HUD lo llama en preload. */
+export function precargarAssetsPanelEntidad(scene) {
+  if (!scene?.load) return;
+  Object.values(ASSETS).forEach((asset) => {
+    if (scene.textures.exists(asset.clave)) return;
+    if (asset.frameWidth) {
+      scene.load.spritesheet(asset.clave, asset.archivo, {
+        frameWidth: asset.frameWidth,
+        frameHeight: asset.frameHeight,
+        margin: asset.margin ?? 0,
+        spacing: asset.spacing ?? 0,
+      });
+      return;
+    }
+    scene.load.image(asset.clave, asset.archivo);
+  });
+  if (!scene.textures.exists(CLAVE_ICONO_FALLBACK)) {
+    scene.load.image(CLAVE_ICONO_FALLBACK, ICONO_FALLBACK);
+  }
+  precargarDescripcionesPanelEntidad(scene);
 }
 
 export function abrirPanelEntidad(scene, opciones) {
@@ -57,7 +81,7 @@ export function abrirPanelEntidad(scene, opciones) {
     alto: f.h * altoPanel,
   });
 
-  const escenaAPausar = opciones.escenaAPausar ?? scene.scene?.get?.('tablero') ?? null;
+  const escenaAPausar = opciones.escenaAPausar ?? null;
   if (escenaAPausar && escenaAPausar.input) {
     escenaAPausar.input.enabled = false;
   }

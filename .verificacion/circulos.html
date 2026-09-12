@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Comprobacion de los circulos de prueba</title>
+  <style>body { margin: 0; background: #1b1b1b; }</style>
+  <script src="/node_modules/phaser/dist/phaser.min.js"></script>
+</head>
+<body>
+<script type="module">
+import { crearRegistro } from '/frontend/src/battle/datosDePotestades/IndexDePotestades.js';
+
+const equipos = {
+  Aliados: [
+    { id: 1, arquetipo: 'Campesino', invetario: [], nivel: 1, posicion: { x: 1, y: 1 } },
+    { id: 2, arquetipo: 'Mago', invetario: [], nivel: 1, posicion: { x: 2, y: 1 } },
+    { id: 3, arquetipo: 'Intelectual', invetario: [], nivel: 1, posicion: { x: 3, y: 1 } },
+    { id: 6, arquetipo: 'Realista', invetario: [], nivel: 1, posicion: { x: 4, y: 1 } },
+    { id: 7, arquetipo: 'Sectario', invetario: [], nivel: 1, posicion: { x: 5, y: 1 } },
+  ],
+  Enemigos: [
+    { id: 8, arquetipo: 'Campesino', invetario: [], nivel: 1, posicion: { x: 1, y: 2 } },
+    { id: 9, arquetipo: 'Mago', invetario: [], nivel: 1, posicion: { x: 2, y: 2 } },
+    { id: 10, arquetipo: 'Intelectual', invetario: [], nivel: 1, posicion: { x: 3, y: 2 } },
+    { id: 11, arquetipo: 'Realista', invetario: [], nivel: 1, posicion: { x: 4, y: 2 } },
+    { id: 12, arquetipo: 'Sectario', invetario: [], nivel: 1, posicion: { x: 5, y: 2 } },
+  ],
+};
+
+class Comprobacion extends Phaser.Scene {
+  create() {
+    const registro = crearRegistro(equipos, this);
+    const resumen = [];
+
+    registro.todos().forEach(({ bando, potestad }) => {
+      const config = potestad.obtenerConfigAnimacionEstatica();
+      const { x, y } = potestad.datos.posicion;
+      const sprite = this.add.sprite(x * 200 - 100, y * 200 - 60, config.plantillaSprite.textureKey, 0).setScale(0.7);
+      sprite.play(config.animKey);
+      resumen.push({
+        arquetipo: potestad.arquetipo,
+        bando,
+        textura: this.textures.exists(config.plantillaSprite.textureKey),
+        fotogramas: this.textures.get(config.plantillaSprite.textureKey).frameTotal,
+        animacion: this.anims.exists(config.animKey),
+        reproduciendo: sprite.anims.isPlaying,
+      });
+      this.add.text(x * 200 - 100, y * 200 + 40, `${bando}`, { fontSize: '18px', color: '#dddddd' }).setOrigin(0.5);
+    });
+
+    window.__resumen = resumen;
+    window.__listo = true;
+  }
+}
+
+new Phaser.Game({
+  type: Phaser.CANVAS,
+  width: 1000,
+  height: 420,
+  backgroundColor: '#1b1b1b',
+  scene: Comprobacion,
+});
+</script>
+</body>
+</html>

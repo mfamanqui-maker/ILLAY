@@ -13,6 +13,10 @@ export default class CharacterSelectScene extends Phaser.Scene {
         super({ key: 'CharacterSelectScene' });
     }
 
+    preload() {
+        this.load.json('Molde_Multijugador', 'src/battle/AlmacenDeMoldes/Molde_Multiplayer.json');
+    }
+
     create() {
         // Instanciamos exactamente los 3 módulos
         const staticElements = new StaticElements(this);
@@ -60,6 +64,10 @@ export default class CharacterSelectScene extends Phaser.Scene {
             enviarMensaje({ type: 'join_room', data: { equipo: equipo } });
             const configuracionDelRival = await esperar('room_created');
             console.log(configuracionDelRival);
+            const moldeMultijugador = this.cache.json.get('Molde_Multijugador');
+            console.log(moldeMultijugador);
+            this.scene.start('vista', moldeMultijugador);
+            this.scene.stop('CharacterSelectScene');
         });
     }
 }

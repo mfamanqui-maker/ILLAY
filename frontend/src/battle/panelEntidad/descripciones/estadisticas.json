@@ -1,6 +1,14 @@
 {
-  "ATK": "Fuerza con la que la entidad inflige daño fisico al atacar.",
-  "DEF": "Reduce el daño fisico recibido por la entidad.",
-  "VELOCIDAD": "Determina el orden de turnos: mayor velocidad actua antes.",
-  "NIVEL": "Indicador general del poder y experiencia de la entidad."
+  "HP": "Puntos de vida de la potestad.",
+  "ESCUDOS": "Cantidad de escudos de la potestad.",
+  "CURAS": "Cantidad de curas de la potestad.",
+  "DAÑO": "Puntos de daño de la potestad.",
+  "VELOCIDAD": "Velocidad de la potestad. (Mayor velocidad actua antes.)",
+  "RANGO": "Rango de la potestad.",
+  "ACCIONISMO": "Cantidad de acciones que puede realizar la potestad por turno.",
+  "ZOMBIOSIS": "Cuantas veces puede ser reanimada la potestad.",
+  "HPMAX": "Puntos de vida maximos de la potestad.",
+  "ANTICRISTO": "Cuanto le falta a la potestad para ser transformada en un demonio.",
+  "MAGIA": "Cantidad de magia de la potestad.",
+  "ESTUDIOS": "Cantidad de estudios de la potestad."
 }
