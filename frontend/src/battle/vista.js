@@ -3,7 +3,7 @@
 
 // dato importante la batalla solo tiene 2 escenas: PhaserMaster(zoom, paneo, hover, clic) y GenerarInterfaz(paneles).
 import PhaserMaster, { CLAVE_ESCENA_MUNDO } from './PhaserMaster.js';
-import GenerarInterfaz, { CLAVE_ESCENA_HUD } from './generarInterfaz.js';
+import GenerarInterfaz, { CLAVE_ESCENA_HUD } from './Interfaz/generarInterfaz.js';
 
 export { CLAVE_ESCENA_MUNDO, CLAVE_ESCENA_HUD };
 

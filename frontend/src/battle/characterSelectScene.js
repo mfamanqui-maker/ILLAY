@@ -6,7 +6,7 @@
 
 */
 
-import { coneccion, enviarMensaje, esperar } from './coneccion.js';
+import { coneccion, buscarPartida, esperarPartida } from './coneccion.js';
 
 export default class CharacterSelectScene extends Phaser.Scene {
     constructor() {
@@ -15,6 +15,10 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
     preload() {
         this.load.json('Molde_Multijugador', 'src/battle/AlmacenDeMoldes/Molde_Multiplayer.json');
+        this.load.spritesheet('La_roon_01', './assets/images/battle/personajes/roon0.png', { frameWidth: 640, frameHeight: 360 });
+        this.load.spritesheet('La_roon_02', './assets/images/battle/personajes/roon1.png', { frameWidth: 640, frameHeight: 360 });
+        this.load.spritesheet('La_roon_03', './assets/images/battle/personajes/roon2.png', { frameWidth: 640, frameHeight: 360 });
+        this.load.spritesheet('La_roon_04', './assets/images/battle/personajes/roon3.png', { frameWidth: 640, frameHeight: 360 });
     }
 
     create() {
@@ -24,6 +28,40 @@ export default class CharacterSelectScene extends Phaser.Scene {
         const allyButtons = new AllyButtons(this);
 
         this.createConfirmButton(allyButtons.allyButtons, boardInteraction.position);
+
+        const parte1 = this.anims.generateFrameNumbers('La_roon_01', { start: 0, end: 14 });
+        const parte2 = this.anims.generateFrameNumbers('La_roon_02', { start: 0, end: 6 });
+        const parte3 = this.anims.generateFrameNumbers('La_roon_03', { start: 0, end: 7 });
+        this.anims.create({
+            key: 'tocarPuerta',
+            frames: [
+                ...parte2,
+                { key: 'La_roon_02', frame: 9 },
+                { key: 'La_roon_02', frame: 12 },
+                { key: 'La_roon_02', frame: 7 },
+                { key: 'La_roon_02', frame: 10 },
+                { key: 'La_roon_02', frame: 13 },
+                { key: 'La_roon_02', frame: 8 },
+                { key: 'La_roon_02', frame: 11 },
+                { key: 'La_roon_02', frame: 14 },
+                ...parte3,
+                { key: 'La_roon_03', frame: 9 },
+                { key: 'La_roon_03', frame: 12 },
+                { key: 'La_roon_03', frame: 8 },
+                { key: 'La_roon_03', frame: 10 },
+                { key: 'La_roon_03', frame: 11 },
+                { key: 'La_roon_03', frame: 13 },
+                { key: 'La_roon_03', frame: 14 },
+                { key: 'La_roon_04', frame: 0 },
+                { key: 'La_roon_04', frame: 3 },
+                { key: 'La_roon_04', frame: 1 },
+                { key: 'La_roon_04', frame: 2 },
+                { key: 'La_roon_04', frame: 4 },
+                { key: 'La_roon_04', frame: 5 },
+            ],
+            frameRate: 8,
+            repeat: -1
+        });
     }
 
     createConfirmButton(personajes, posiciones) {
@@ -39,6 +77,8 @@ export default class CharacterSelectScene extends Phaser.Scene {
             .setInteractive({ useHandCursor: true })
             .setAlpha(0.5)
         ConfirmButton.on('pointerdown', async() => { //200IQ
+            this.loquita = this.physics.add.sprite(850, 450, 'La_roon_01').setScale(2.4);
+            this.loquita.play('tocarPuerta');
             const equipo = {
                 Aliados: [{
                     arquetipo: personajes[0],
@@ -61,11 +101,24 @@ export default class CharacterSelectScene extends Phaser.Scene {
             }
             await coneccion();
             text.setText('Iniciando Batalla...');
-            enviarMensaje({ type: 'join_room', data: { equipo: equipo } });
-            const configuracionDelRival = await esperar('room_created');
-            console.log(configuracionDelRival);
+            buscarPartida(equipo);
+            const respuesta = await esperarPartida();
+            if (respuesta.type === 'Partida_No_Encontrada') {
+                text.setText('No se encontro partida');
+                return;
+            }
+            const configuracionEquipo = respuesta.data;
             const moldeMultijugador = this.cache.json.get('Molde_Multijugador');
-            console.log(moldeMultijugador);
+            moldeMultijugador.equipos = configuracionEquipo;
+            console.log(configuracionEquipo);
+
+            const aliados = configuracionEquipo.aliados.equipo.Aliados;
+            const rival = configuracionEquipo.rival.equipo.Aliados;
+
+            rival.forEach(personaje => { personaje.posicion.x = 11 - personaje.posicion.x});
+            moldeMultijugador.equipos.Aliados = aliados;
+            moldeMultijugador.equipos.Enemigos = rival;
+
             this.scene.start('vista', moldeMultijugador);
             this.scene.stop('CharacterSelectScene');
         });

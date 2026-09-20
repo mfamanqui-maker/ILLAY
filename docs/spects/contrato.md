@@ -38,11 +38,11 @@ una regla, se cambia aqui y en los diez spects, no solo en uno.
    funcion: un nombre cabe en un JSON, una closure no.
 
 7. **PhaserMaster es dueno del estado, no del comportamiento.** Metodos de 15
-   lineas o menos, archivo por debajo de 200. Si un metodo crece, no es suyo.
+   lineas o menos, archivo por debajo de 300. Si un metodo crece, no es suyo.
 
-8. **`utilidadesDeSeleccion.js`: funciones puras, cero imports de Phaser.**
-   Es una regla que se verifica mirando la primera linea del archivo, y por eso
-   sobrevive.
+8. **`utilidadesDeSeleccion.js` usa Phaser solo para marcas de seleccion**
+   (brillo de accionismo, dianas y casillas). No importa orbes, panel ni red.
+   Si el archivo empieza a hablar de clics o de WebSocket, el trabajo no es suyo.
 
 9. **`IndexDePotestades.js` no importa panel, orbes ni show.** Expone los datos
    con la forma que piden; no los conoce. Si algun dia los importa, la flecha

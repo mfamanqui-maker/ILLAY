@@ -19,6 +19,8 @@
  * ya creado. No clona acciones ni cuelga el tablero de la potestad.
  */
 
+import { iniciarBrilloAccionismo } from '../datosDePotestades/utilidadesDeSeleccion.js';
+
 // ─── RESCATE: phaserMoldFactory.js lineas 20-22 y 39-59. Sirve tal cual. ─────
 // Nota de vocabulario: aqui "molde" significaba la plantilla de un sprite.
 // Ese sentido queda RETIRADO: en el arbol nuevo "molde" es una plantilla de
@@ -150,5 +152,6 @@ export default class PotestadesTablero {
     const casilla = this.tablero?.[pos.y - 1]?.[pos.x - 1];
     if (casilla && casilla.id !== 0) casilla.entidad = potestad;
     this.cuerpos.set(potestad.id, potestad.sprite);
+    iniciarBrilloAccionismo(potestad, this.escena, bando);
   }
 }

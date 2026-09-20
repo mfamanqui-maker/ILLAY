@@ -9,8 +9,8 @@
 > 4. El tablero es base 1 hacia afuera. Solo `UtilsTablero` indexa en base 0.
 > 5. El azar se resuelve en el cliente dueno de la potestad al confirmar, **antes de enviar**, y el resultado viaja en el payload.
 > 6. La configuracion serializable es `{ id, nombreDeAccion, objetivo, azar }`. Las acciones viajan por nombre, nunca como funcion.
-> 7. PhaserMaster es dueno del estado, no del comportamiento: metodos de 15 lineas, archivo por debajo de 200.
-> 8. `utilidadesDeSeleccion.js`: funciones puras, cero imports de Phaser.
+> 7. PhaserMaster es dueno del estado, no del comportamiento: metodos de 15 lineas, archivo por debajo de 300.
+> 8. `utilidadesDeSeleccion.js` usa Phaser solo para marcas de seleccion. No importa orbes, panel ni red.
 > 9. `IndexDePotestades.js` no importa panel, orbes ni show.
 > 10. Orden de fases por grupo de velocidad: cancelaciones, resolucion contra la foto, muertes, animacion. El guion no avanza hasta que el show termina.
 
@@ -117,10 +117,12 @@ catalogo. Si se declarara a mano, alguien lo escribiria mal y el bucle de
 rondas se quedaria esperando una respuesta que no llega.
 
 - `directo.js` — no necesita nada. Se envia como `..._Final`.
-- `directoEnemiga.js` — necesita un objetivo, que se pide al elegirla. Tambien
+- `dianaEnemiga.js` — necesita un objetivo enemigo, que se pide al elegirla. Tambien
 `..._Final`.
-- `directoConfig1.js` — necesita saber que hizo el rival. Obliga a
+- `configtype1.js` — necesita saber que hizo el rival. Obliga a
 `Enviar_Config_Acciones` (sin `_Final`) y a esperar respuesta.
+
+existen más tipos de acciones pero todas ellas derivan de estas tres y es facil intuir que haran.
 
 
 
@@ -149,23 +151,13 @@ Regla 9: este archivo no importa `panelEntidad`, `sistemaDeOrbes` ni
 
 ### utilidadesDeSeleccion.js
 
-Funciones puras. Regla 8: cero imports de Phaser. Ya rescatado casi entero de
-`Aliados.js` 563-667.
+Decide que objetivos son validos y, si hay escena, pinta el brillo. Regla 8:
+Phaser solo para marcas; no orbes, no panel, no red. El clic se queda en
+orbes.
 
 `normalizarCasoSeleccion`, `normalizarBandosObjetivo`, `obtenerRangoAccion`,
 `estaDentroDeRango`, `casillaEstaOcupada`, `candidatosPorBando`,
-`candidatosCasilla`.
-
-## Trabajo pendiente concreto
-
-**Fase 1: Implementar las potestades y acciones.**:
-  - Implementar las potestades y acciones.
-  - Implementar las animaciones. (cambios de color, particulas, parpadear, etc)
-
-**Fase 2: .*Implementar el index de potestades**:
-  - Implementar los registros de potestades.
-  - crear objetos que puedan ser usados para pintar las potestades en el tablero
-
+`candidatosCasilla`, `iniciarBrillo`, `frenarBrillo`, `seleccionarObjetivos`.
 
 ## Invariantes
 
@@ -177,7 +169,8 @@ derivado, no un dato.
 `undefined` ni una clase por defecto: un error temprano y claro cuesta menos
 que una potestad invisible.
 - Los ids son unicos entre los dos bandos, no por bando.
-- `utilidadesDeSeleccion.js` no importa Phaser. Ni una vez.
+- `utilidadesDeSeleccion.js` no importa orbes, panel ni red. Phaser solo
+para marcas de seleccion.
 
 
 
@@ -201,7 +194,8 @@ cambiarla rompe los moldes existentes sin ganar nada.
 `JSON.stringify` y `JSON.parse` y sigue siendo ejecutable despues de
 `normalizarConfiguracion`.
 - `atacar` esta escrita **una vez** para todo el juego, no una por personaje.
-- `grep -c "import" utilidadesDeSeleccion.js` da cero.
+- `grep -E "sistemaDeOrbes|panelEntidad|coneccion" utilidadesDeSeleccion.js` no
+encuentra nada.
 - `grep -E "panelEntidad|sistemaDeOrbes|guionSincrono" IndexDePotestades.js` no
 encuentra nada.
 

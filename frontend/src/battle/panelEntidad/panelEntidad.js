@@ -255,7 +255,7 @@ export function abrirPanelEntidad(scene, opciones) {
   }
 
   function historial() {
-    console.log('trabajando en ello...');
+    opciones.onHistorial?.();
   }
 
   const enrutarScroll = (pointer, deltaY) => {

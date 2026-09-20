@@ -1,54 +1,69 @@
-// CONTEXTO: esta es la primera pieza que se activa. Monta el tablero y las potestades, sostiene la data, reparte los inputs, 
-// habla con el servidor o con la IA por coneccion.js, guarda el registro de jugadas y decide cuando termina la batalla.
+// Coordinador: monta tablero y potestades, reparte inputs, negocia la ronda.
 
-import { CLAVE_ESCENA_HUD } from './generarInterfaz.js';
+import { CLAVE_ESCENA_HUD } from './Interfaz/generarInterfaz.js';
+import { cerrarPartida } from './Interfaz/accionesDeBarra.js';
 import AdministradorTablero from './tablero/AdministradorTablero.js';
 import PotestadesTablero from './tablero/PotestadesTablero.js';
-import { crearRegistro, descriptoresDeSpritesheet, adaptarParaPanel } from './datosDePotestades/IndexDePotestades.js';
+import { crearRegistro, descriptoresDeSpritesheet, adaptarParaPanel, prepararTareasDeTurno } from './datosDePotestades/IndexDePotestades.js';
+import {
+  marcarAccionismoGastado,
+  reiniciarAccionismo,
+  restaurarBrillosAccionismo,
+} from './datosDePotestades/utilidadesDeSeleccion.js';
 import { SistemaDeOrbes, precargarOrbes } from './sistemaDeOrbes/index.js';
+import { transporte } from './coneccion.js';
+import { negociar } from './negociadorDeRonda.js';
+import {
+  anotarJugadaEnRegistro,
+  crearRegistroVacio,
+  jugadaDesdeTarea,
+  registrarNuevoTurno,
+  registrarTurnoInicial,
+} from './historial.js';
+import { ejecutarTurno, loguearMapaGuion, agruparPorVelocidad } from './guionSincrono.js';
+import { reproducirGrupo } from './showAsincrono.js';
+import { crearPilaPasivas } from './pilaPasivas.js';
 
 export const CLAVE_ESCENA_MUNDO = 'PhaserMaster';
 
 /** Evento del emisor -> metodo. Anadir un input es una fila. */
 const RUTAS_DE_INPUT = {
-  // 1. Tablero: detecta y emite, no decide.
   casillaPulsada: '_alPulsarCasilla',
   potestadPulsada: '_alSeleccionarPotestad',
   potestadDoblePulsada: '_alAbrirPanel',
-  // 2. Panel de entidad: se le inyectan callbacks; solo avisa de que se cerro.
   panelCerrado: '_alCerrarPanel',
-  // 3. Orbes: el jugador ya eligio accion y objetivo para una potestad.
   accionElegida: '_alElegirAccion',
-  // 4. Interfaz: los cinco botones del HUD.
   confirmar: '_alConfirmarJugada',
   rendirse: '_alRendirse',
-  pausa: '_alPausar',
-  historial: '_alAbrirHistorial',
-  ignorarInterfaz: '_alIgnorarInterfaz',
 };
 
 export default class PhaserMaster extends Phaser.Scene {
   constructor() {
     super({ key: CLAVE_ESCENA_MUNDO });
-    this.configuracion = null; // molde de init(). Entrada, no estado: no se toca
-    this.eventos = null; // emisor propio (regla 2). Unico canal entre sistemas
-    this.administrador = null; // dueno del tablero y de su dibujo
-    this.tablero = null; // array bidimensional, base 1 hacia afuera
-    this.registro = null; // potestades consultables por id
-    this.cuerpos = null; // correspondencia id -> cuerpo en pantalla
-    this.registroDeJugadas = null; // lo dibuja historial.js, lo lee finalidad.js
-    this.estadoRonda = null; // seleccionando|esperandoRival|precombate|ejecutando
-    this.seleccion = null; // potestad seleccionada y sus orbes abiertas
-    this.configDelTurno = null; // id -> { id, nombreDeAccion, objetivo, azar }
-    this.orbesSistema = null; // un solo menu radial; se reutiliza por seleccion
+    this.configuracion = null;
+    this.eventos = null;
+    this.administrador = null;
+    this.tablero = null;
+    this.registro = null;
+    this.cuerpos = null;
+    this.registroDeJugadas = null;
+    this.estadoRonda = null;
+    this.seleccion = null;
+    this.configDelTurno = null;
+    this.orbesSistema = null;
+    this.transporte = transporte;
   }
 
-  /** @param {object} configuracion molde ya resuelto que entrega vista.js */
   init(configuracion) {
     this.configuracion = configuracion ?? null;
     this.eventos = new Phaser.Events.EventEmitter();
-    this.registroDeJugadas = [];
+    this.registroDeJugadas = crearRegistroVacio();
     this.configDelTurno = new Map();
+    this.configPropia = null;
+    this.configRival = null;
+    this.idsPendientes = null;
+    this._negociando = false;
+    this._batallaCerrada = false;
     this.estadoRonda = 'seleccionando';
   }
 
@@ -64,16 +79,15 @@ export default class PhaserMaster extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
     this._mostrarTablero();
     await this._mostrarPotestades();
+    registrarTurnoInicial(this.registroDeJugadas, this.registro);
     this._registrarInputs();
-    this._lanzarInterfaz();
+    this.scene.launch(CLAVE_ESCENA_HUD, {
+      eventos: this.eventos,
+      obtenerRegistro: () => this.registroDeJugadas,
+    });
     this._cambiarFase('seleccionando');
   }
 
-  // ── Montaje ───────────────────────────────────────────────────────────────
-  // Orden estricto: no hay potestades sin tablero, ni inputs sin saber quien
-  // ocupa cada casilla.
-
-  /** Pide el tablero al administrador y guarda las dos referencias. */
   _mostrarTablero() {
     this.administrador = new AdministradorTablero(this, this.eventos);
     this.tablero = this.administrador.construirDesdeMolde(this.configuracion);
@@ -84,7 +98,6 @@ export default class PhaserMaster extends Phaser.Scene {
     this.administrador.registrarClicCasilla();
   }
 
-  /** El registro ya se instancia aqui; colocar el cuerpo es del puente. */
   async _mostrarPotestades() {
     this.registro = crearRegistro(this.configuracion?.equipos, this);
     const puente = new PotestadesTablero(this, this.tablero, this.registro, this.administrador.tileSize);
@@ -92,44 +105,37 @@ export default class PhaserMaster extends Phaser.Scene {
     this.orbesSistema = new SistemaDeOrbes(this, this.eventos, this.registro, this.tablero);
   }
 
-  /** El HUD lo anade vista.js, pero lo lanza esta escena: lanzarlo es la unica
-   *  forma de inyectarle el emisor sin que el vaya a buscarlo (regla 2). */
-  _lanzarInterfaz() {
-    this.scene.launch(CLAVE_ESCENA_HUD, { eventos: this.eventos });
-  }
-
-  // ── Hub de inputs ─────────────────────────────────────────────────────────
-
   _registrarInputs() {
     Object.entries(RUTAS_DE_INPUT).forEach(([evento, metodo]) => {
       this.eventos.on(evento, this[metodo], this);
     });
   }
 
-  /** Simetrico y con la misma tabla: ningun listener sobrevive a la batalla. */
   _desregistrarInputs() {
     Object.entries(RUTAS_DE_INPUT).forEach(([evento, metodo]) => {
       this.eventos.off(evento, this[metodo], this);
     });
   }
 
-  // ── Inputs del tablero ────────────────────────────────────────────────────
-
   _cerrarOrbes() {
     this.orbesSistema?.onDeseleccionar();
     this.seleccion = null;
   }
 
-  /** Clic: abre orbes de esa potestad. Si hay objetivo pendiente, no interrumpe. */
+  _inputsBloqueados() {
+    return this._negociando || this.estadoRonda === 'esperandoRival' || this.estadoRonda === 'ejecutando';
+  }
+
   _alSeleccionarPotestad({ entidad, col, fila }) {
-    if (this.orbesSistema?.bloqueandoClic) return;
+    if (this._inputsBloqueados() || this.orbesSistema?.bloqueandoClic || entidad.bando === 'Enemigos') return;
+    if (this.idsPendientes && !this.idsPendientes.includes(entidad.id)) return;
     this.orbesSistema?.onDeseleccionar();
     this.seleccion = { entidad, col, fila };
     this.orbesSistema?.onSeleccionar(entidad);
   }
 
-  /** Doble clic: el HUD dibuja el panel. escenaAPausar va inyectada (regla 2). */
   _alAbrirPanel({ entidad }) {
+    if (this._inputsBloqueados()) return;
     this.orbesSistema?.onDeseleccionar();
     const entrada = this.registro.obtenerPorId(entidad?.id);
     const datos = adaptarParaPanel(entidad, entrada?.bando, this.registro);
@@ -144,45 +150,139 @@ export default class PhaserMaster extends Phaser.Scene {
     });
   }
 
-  /** Casilla vacia: deselecciona. Las marcas de objetivo las atienden las orbes. */
   _alPulsarCasilla() {
-    if (this.orbesSistema?.bloqueandoClic) return;
+    if (this._inputsBloqueados() || this.orbesSistema?.bloqueandoClic) return;
     this._cerrarOrbes();
   }
 
-  // ── Input de las orbes ────────────────────────────────────────────────────
-
-  /** Unico sitio donde se acumula lo que hara el jugador este turno. El azar
-   *  llega resuelto por quien confirma: tirarlo aqui divergiria las partidas. */
+  /** Accionismo 1: elegir otra vez reemplaza. Cupo 0 rechaza. */
   _alElegirAccion({ id, nombreDeAccion, objetivo, azar }) {
+    if (this._inputsBloqueados()) return;
+    const entrada = this.registro?.obtenerPorId(id);
+    if (Number(entrada?.potestad?.constantes?.accionismo ?? 1) < 1) return;
     this.configDelTurno.set(id, { id, nombreDeAccion, objetivo, azar: azar ?? null });
+    marcarAccionismoGastado(entrada?.potestad);
   }
 
-  /** El panel se cerro: el control vuelve al tablero. */
   _alCerrarPanel() {}
+  async _alConfirmarJugada() {
+    if (this._negociando || this.estadoRonda === 'ejecutando') return;
+    this._cerrarOrbes();
+    this._cambiarFase('esperandoRival');
+    this._negociando = true;
+    try {
+      await this._aplicarResultadoRonda(await negociar(this.configDelTurno, this._ctxRonda()));
+    } finally {
+      this._negociando = false;
+    }
+  }
 
-  // ── Inputs de la interfaz ─────────────────────────────────────────────────
+  _ctxRonda() {
+    return {
+      transporte: this.transporte, columnas: this.configuracion?.configTablero?.columnas,
+      registro: this.registro, haySocket: this.transporte.estaConectado(),
+      configuracionRival: this.configRival,
+    };
+  }
 
-  _alConfirmarJugada() { console.log('confirmar'); }
-  _alRendirse() { console.log('rendirse'); }
-  _alPausar() { console.log('pausa'); }
-  _alAbrirHistorial() { console.log('historial'); }
-  _alIgnorarInterfaz() { console.log('ignorarInterfaz'); }
+  async _aplicarResultadoRonda(resultado) {
+    if (resultado.fase === 'terminada') return this._terminarBatalla(resultado.resultado, true);
+    this.configPropia = resultado.propia ?? [];
+    this._recibirConfiguracionRival(resultado.rival);
+    this.idsPendientes = resultado.fase === 'seleccionando' ? resultado.idsPendientes : null;
+    if (resultado.fase === 'precombate') {
+      this._cambiarFase('precombate');
+      return this._ejecutarTurno();
+    }
+    this._cambiarFase('seleccionando');
+  }
 
-  // ── Fase, ronda y fin ─────────────────────────────────────────────────────
+  async _alRendirse() {
+    if (this._negociando || this.estadoRonda === 'esperandoRival') return;
+    try {
+      await this._terminarBatalla('derrota');
+    } catch (error) {
+      console.error('[PhaserMaster] rendirse:', error);
+    }
+  }
 
-  /** El HUD no adivina la fase: se le anuncia y el habilita sus botones. */
   _cambiarFase(estadoRonda) {
     this.estadoRonda = estadoRonda;
+    if (estadoRonda === 'seleccionando' && this.registro) {
+      reiniciarAccionismo(this.idsPendientes);
+      restaurarBrillosAccionismo({ escena: this, potestades: this.registro.todos() });
+    }
     this.eventos.emit('faseCambiada', estadoRonda);
   }
 
-  // Bucle de rondas (spect 010). El registro se anota aunque el historial no se abra.
-  _enviarConfiguracion(configuracion, esFinal) {}
-  _recibirConfiguracionRival(configuracion) {}
-  _ejecutarTurno() {}
-  _anotarJugada(jugada) {}
-  _terminarBatalla(resultado) {}
+  _enviarConfiguracion(configuracion, esFinal) {
+    this.transporte.enviarConfiguracion(configuracion, esFinal);
+  }
+
+  _recibirConfiguracionRival(configuracion) {
+    this.configRival = configuracion ?? [];
+    if (this.orbesSistema) this.orbesSistema.configuracionRival = this.configRival;
+  }
+
+  /** Precombate: Index enriquece, guion resuelve, show anima. */
+  async _ejecutarTurno() {
+    this._cambiarFase('ejecutando');
+    registrarNuevoTurno(this.registroDeJugadas, this.registro);
+    this.eventos.emit('registroJugadasActualizado', this.registroDeJugadas);
+    const filas = [...(this.configPropia ?? []), ...(this.configRival ?? [])];
+    const tareas = prepararTareasDeTurno(filas, this.registro);
+    loguearMapaGuion(new Map(agruparPorVelocidad(tareas).map((g) => [g.velocidad, g.tareas])));
+    const { fin } = await ejecutarTurno(tareas, this._ctxGuion());
+    this._limpiarTrasTurno();
+    if (fin) await this._terminarBatalla(fin);
+    else this._cambiarFase('seleccionando');
+  }
+
+  _ctxGuion() {
+    return {
+      escena: this,
+      tablero: this.tablero,
+      eventos: this.eventos,
+      registro: this.registro,
+      pila: crearPilaPasivas(),
+      tamanoCasilla: this.administrador?.tileSize ?? 400,
+      reproducirGrupo,
+      onJugada: (j) => this._anotarJugada(j),
+    };
+  }
+
+  _limpiarTrasTurno() {
+    this.configDelTurno = new Map();
+    this.configPropia = null;
+    this._recibirConfiguracionRival(null);
+    this.idsPendientes = null;
+  }
+
+  _anotarJugada(tarea) {
+    const turno = this.registroDeJugadas.turnos[this.registroDeJugadas.turnos.length - 1]?.numero ?? 0;
+    anotarJugadaEnRegistro(this.registroDeJugadas, jugadaDesdeTarea(tarea, turno));
+    this.eventos.emit('registroJugadasActualizado', this.registroDeJugadas);
+  }
+
+  async _terminarBatalla(resultadoLocal, yaVeredicto = false) {
+    if (this._batallaCerrada) return;
+    this._batallaCerrada = true;
+    const resultado = yaVeredicto
+      ? resultadoLocal
+      : (await cerrarPartida(this.transporte, resultadoLocal)).resultado;
+    const destino = this.configuracion?.reglasExtra?.destino?.[resultado] ?? null;
+    this.eventos.emit('batallaTerminada', {
+      resultado, registro: this.registroDeJugadas, destino,
+      alSalir: (d) => this._alSalir(d),
+    });
+  }
+
+  _alSalir(destino) {
+    const clave = destino?.key;
+    this.scene.stop(CLAVE_ESCENA_HUD);
+    this.scene.stop(CLAVE_ESCENA_MUNDO);
+    if (clave) this.scene.start(clave, destino);
+  }
 
   shutdown() {
     this._cerrarOrbes();

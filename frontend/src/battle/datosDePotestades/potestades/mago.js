@@ -38,12 +38,14 @@ function asegurarParticula(escena) {
 
 function puntoDe(contexto, potestad) {
   const t = contexto?.tamanoCasilla ?? 400;
-  const d = contexto?.destino;
-  if (d?.x != null && d?.y != null) {
-    if (d.x <= 32 && d.y <= 32) {
-      return { x: (d.x - 1) * t + t / 2, y: (d.y - 1) * t + t / 2 - 80 };
-    }
-    return { x: d.x, y: d.y };
+  const d = contexto?.destino
+    ?? (contexto?.objetivo?.x != null && !contexto.objetivo.sprite ? contexto.objetivo : null)
+    ?? contexto?.tarea?.objetivo;
+  if (d?.x != null && d?.y != null && !d.sprite && !d.estadisticas) {
+    return {
+      x: (Number(d.x) - 1) * t + t / 2,
+      y: (Number(d.y) - 1) * t + t / 2 - 40,
+    };
   }
   if (contexto?.objetivo?.sprite) {
     return { x: contexto.objetivo.sprite.x, y: contexto.objetivo.sprite.y };
@@ -93,7 +95,7 @@ function bordeLejano(sprite, tablero, tamano) {
 
 export class Mago {
   static arquetipo = 'Mago';
-  static color = 0x3d9b4a;
+  static color = 0x713d9b;
   static spritesheet = { clave: 'circulo_mago', archivo: null, ancho: LADO, alto: LADO };
 
   constructor(datos, bando = 'Aliados') {
@@ -145,14 +147,14 @@ export class Mago {
     const stats = this.estadisticas;
     this.listaDeAcciones = {
       habilidades: [
-        { nombre: 'curar', rango: 3, velocidad: 15 + this.nivel * 2, condicional: stats.curas > 0, ruta: `${ICONOS}/S_Holy03.png` },
-        { nombre: 'generarMagia', velocidad: 20, condicional: true, ruta: `${ICONOS}/S_Magic05.png` },
-        { nombre: 'rayoDeMagia', rango: 3, velocidad: 15, condicional: stats.magia > 0, ruta: `${ICONOS}/S_Thunder03.png` },
-        { nombre: 'zombiosis', rango: 2, velocidad: 25, condicional: false, ruta: `${ICONOS}/S_Poison03.png` },
+        { nombre: 'curar', rango: Infinity, velocidad: 0, condicional: stats.curas > 0, ruta: `${ICONOS}/S_Holy03.png` , type: 'dianaAliado'},
+        { nombre: 'generar magia', velocidad: 50, condicional: true, ruta: `${ICONOS}/S_Magic05.png` , type: 'directo'},
+        { nombre: 'rayo de magia', velocidad: 0, condicional: stats.magia > 0, ruta: `${ICONOS}/S_Thunder03.png` , type: 'dianaEnemigo'},
+        { nombre: 'zombiosis', rango: Infinity, velocidad: 100, condicional: false, ruta: `${ICONOS}/S_Poison03.png` , type: 'dianaAliado'},
       ],
       objetos: [],
       movimiento: [
-        { nombre: 'moverse', rango: 1, velocidad: 10, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` },
+        { nombre: 'moverse', rango: 1, velocidad: 100, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` , type: 'dianaCasilla'},
       ],
     };
     return this.listaDeAcciones;

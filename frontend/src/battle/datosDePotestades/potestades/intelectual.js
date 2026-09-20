@@ -37,12 +37,14 @@ function asegurarParticula(escena) {
 
 function puntoDe(contexto, potestad) {
   const t = contexto?.tamanoCasilla ?? 400;
-  const d = contexto?.destino;
-  if (d?.x != null && d?.y != null) {
-    if (d.x <= 32 && d.y <= 32) {
-      return { x: (d.x - 1) * t + t / 2, y: (d.y - 1) * t + t / 2 - 80 };
-    }
-    return { x: d.x, y: d.y };
+  const d = contexto?.destino
+    ?? (contexto?.objetivo?.x != null && !contexto.objetivo.sprite ? contexto.objetivo : null)
+    ?? contexto?.tarea?.objetivo;
+  if (d?.x != null && d?.y != null && !d.sprite && !d.estadisticas) {
+    return {
+      x: (Number(d.x) - 1) * t + t / 2,
+      y: (Number(d.y) - 1) * t + t / 2 - 40,
+    };
   }
   if (contexto?.objetivo?.sprite) {
     return { x: contexto.objetivo.sprite.x, y: contexto.objetivo.sprite.y };
@@ -117,8 +119,7 @@ export class Intelectual {
     this.constantes = {
       hpMax: 5 + 2 * nivel,
       accionismo: 1,
-      zombiosis: 1,
-      triggerArquetipo: { arquetipo: 'Opcion de espera' },
+      zombiosis: 1
     };
     this.calcularAcciones();
     return this.estadisticas;
@@ -129,14 +130,14 @@ export class Intelectual {
     const nivel = this.nivel;
     this.listaDeAcciones = {
       habilidades: [
-        { nombre: 'escudar', rango: 2, velocidad: 10 + 3 * (nivel - 1), condicional: stats.escudos > 0, ruta: `${ICONOS}/E_Wood03.png` },
-        { nombre: 'estudiar', velocidad: 20, condicional: true, ruta: `${ICONOS}/I_Book.png` },
-        { nombre: 'apuntar', rango: 4, velocidad: 5, condicional: true, ruta: `${ICONOS}/I_Eye.png` },
-        { nombre: 'disparar', rango: 4, velocidad: 15, condicional: stats.apuntando != null, ruta: `${ICONOS}/S_Bow01.png` },
+        { nombre: 'escudar', rango: Infinity, velocidad: 100, condicional: stats.escudos > 0, ruta: `${ICONOS}/E_Wood03.png` , type: 'configtype1aliado'},
+        { nombre: 'estudiar', velocidad: 50, condicional: true, ruta: `${ICONOS}/I_Book.png` , type: 'directo'},
+        { nombre: 'apuntar', velocidad: 150, condicional: true, ruta: `${ICONOS}/I_Eye.png` , type: 'dianaEnemigo'},
+        { nombre: 'disparar', rango: Infinity, velocidad: 50, condicional: stats.conocimiento > 0, ruta: `${ICONOS}/S_Bow01.png` , type: 'dianaEnemigo'},
       ],
       objetos: [],
       movimiento: [
-        { nombre: 'moverse', rango: 1, velocidad: 10, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` },
+        { nombre: 'moverse', rango: 1, velocidad: 100, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` , type: 'dianaCasilla'},
       ],
     };
     return this.listaDeAcciones;

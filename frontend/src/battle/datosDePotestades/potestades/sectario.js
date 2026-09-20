@@ -16,7 +16,7 @@ const RADIO_BASE = 150;
 const AMPLITUD = 7;
 const GROSOR_ANILLO = 12;
 const ANILLO_POR_BANDO = { Aliados: 0x7ed4ff, Enemigos: 0xff6b6b };
-const ANILLO_POR_DEFECTO = 0xf5d68a;
+const ANILLO_POR_DEFECTO = 0xb50033;
 
 function aCss(entero) {
   return `#${(Number(entero) >>> 0).toString(16).padStart(6, '0')}`;
@@ -38,12 +38,14 @@ function asegurarParticula(escena) {
 
 function puntoDe(contexto, potestad) {
   const t = contexto?.tamanoCasilla ?? 400;
-  const d = contexto?.destino;
-  if (d?.x != null && d?.y != null) {
-    if (d.x <= 32 && d.y <= 32) {
-      return { x: (d.x - 1) * t + t / 2, y: (d.y - 1) * t + t / 2 - 80 };
-    }
-    return { x: d.x, y: d.y };
+  const d = contexto?.destino
+    ?? (contexto?.objetivo?.x != null && !contexto.objetivo.sprite ? contexto.objetivo : null)
+    ?? contexto?.tarea?.objetivo;
+  if (d?.x != null && d?.y != null && !d.sprite && !d.estadisticas) {
+    return {
+      x: (Number(d.x) - 1) * t + t / 2,
+      y: (Number(d.y) - 1) * t + t / 2 - 40,
+    };
   }
   if (contexto?.objetivo?.sprite) {
     return { x: contexto.objetivo.sprite.x, y: contexto.objetivo.sprite.y };
@@ -75,7 +77,7 @@ function tweenPromise(escena, config) {
 
 export class Sectario {
   static arquetipo = 'Sectario';
-  static color = 0xf08080;
+  static color = 0xb50033;
   static spritesheet = { clave: 'circulo_sectario', archivo: null, ancho: LADO, alto: LADO };
 
   constructor(datos, bando = 'Aliados') {
@@ -118,11 +120,12 @@ export class Sectario {
       hpMax: 5 + 2 * nivel,
       accionismo: 1,
       zombiosis: 0,
-      triggerArquetipo: {
-        arquetipo: 'Bloquear acciones',
-        accionesBloqueadas: ['atacar', 'maldicion'],
-        condicion: { estadistica: 'anticristo', operador: '>', valor: 6 },
-      },
+    };
+    this.triggers = {
+      arquetipo: 'cristianismo'
+    };
+    this.efectos = {
+      cristianismo: true,
     };
     this.calcularAcciones();
     return this.estadisticas;
@@ -133,14 +136,14 @@ export class Sectario {
     const nivel = this.nivel;
     this.listaDeAcciones = {
       habilidades: [
-        { nombre: 'ritual', velocidad: 20, condicional: true, ruta: `${ICONOS}/S_Shadow05.png` },
-        { nombre: 'pacto', velocidad: 25, condicional: false, ruta: `${ICONOS}/S_Shadow09.png` },
-        { nombre: 'atacar', rango: stats.rango, velocidad: 15 + (nivel - 1), condicional: true, ruta: `${ICONOS}/S_Sword01.png` },
-        { nombre: 'maldicion', rango: 3, velocidad: 18, condicional: stats.anticristo > 0, ruta: `${ICONOS}/S_Shadow13.png` },
+        { nombre: 'ritual', velocidad: 0, condicional: true, ruta: `${ICONOS}/S_Shadow05.png` , type: 'directo'},
+        { nombre: 'pacto', velocidad: 120, condicional: stats.anticristo > 0, ruta: `${ICONOS}/S_Shadow09.png` , type: 'directo'},
+        { nombre: 'atacar', rango: 5, velocidad: 50, condicional: stats.anticristo < 6, ruta: `${ICONOS}/S_Sword01.png` , type: 'dianaEnemigo'},
+        { nombre: 'maldicion', rango: Infinity, velocidad: 100, condicional: stats.anticristo > 6, ruta: `${ICONOS}/S_Shadow13.png` , type: 'dianaEnemigo'},
       ],
       objetos: [],
       movimiento: [
-        { nombre: 'moverse', rango: 1, velocidad: 10, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` },
+        { nombre: 'moverse', rango: 1, velocidad: 100, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` , type: 'dianaCasilla'},
       ],
     };
     return this.listaDeAcciones;

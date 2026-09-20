@@ -43,12 +43,14 @@ function asegurarParticula(escena) {
 
 function puntoDe(contexto, potestad) {
   const t = contexto?.tamanoCasilla ?? 400;
-  const d = contexto?.destino;
-  if (d?.x != null && d?.y != null) {
-    if (d.x <= 32 && d.y <= 32) {
-      return { x: (d.x - 1) * t + t / 2, y: (d.y - 1) * t + t / 2 - 80 };
-    }
-    return { x: d.x, y: d.y };
+  const d = contexto?.destino
+    ?? (contexto?.objetivo?.x != null && !contexto.objetivo.sprite ? contexto.objetivo : null)
+    ?? contexto?.tarea?.objetivo;
+  if (d?.x != null && d?.y != null && !d.sprite && !d.estadisticas) {
+    return {
+      x: (Number(d.x) - 1) * t + t / 2,
+      y: (Number(d.y) - 1) * t + t / 2 - 40,
+    };
   }
   if (contexto?.objetivo?.sprite) {
     return { x: contexto.objetivo.sprite.x, y: contexto.objetivo.sprite.y };
@@ -133,15 +135,15 @@ export class Campesino {
     const nivel = this.nivel;
     this.listaDeAcciones = {
       habilidades: [
-        { nombre: 'curar', rango: 3, velocidad: 15 + nivel * 2, condicional: stats.curas > 0, ruta: `${ICONOS}/S_Holy03.png` },
-        { nombre: 'escudar', rango: 2, velocidad: 10 + 3 * (nivel - 1), condicional: stats.escudos > 0, ruta: `${ICONOS}/E_Wood03.png` },
-        { nombre: 'atacar', rango: stats.rango, velocidad: 15 + (nivel - 1), condicional: true, ruta: `${ICONOS}/S_Sword01.png` },
+        { nombre: 'curar', rango: Infinity, velocidad: 0, condicional: stats.curas > 0, ruta: `${ICONOS}/S_Holy03.png` , type: 'dianaAliado'},
+        { nombre: 'escudar', rango: Infinity, velocidad: 100, condicional: stats.escudos > 0, ruta: `${ICONOS}/E_Wood03.png` , type: 'configtype1aliado'},
+        { nombre: 'atacar', rango: 1, velocidad: 50, condicional: true, ruta: `${ICONOS}/S_Sword01.png` , type: 'dianaEnemigo'},
       ],
       objetos: [
-        { nombre: 'ponerTrampa', rango: 1, velocidad: 10, condicional: true, ruta: `${ICONOS}/S_Earth03.png` },
+        { nombre: 'poner trampa', rango: 2, velocidad: 50, condicional: true, ruta: `${ICONOS}/S_Earth03.png` , type: 'dianaCasilla'},
       ],
       movimiento: [
-        { nombre: 'moverse', rango: 1, velocidad: 10, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` },
+        { nombre: 'moverse', rango: 2, velocidad: 100, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` , type: 'dianaCasilla'},
       ],
     };
     return this.listaDeAcciones;

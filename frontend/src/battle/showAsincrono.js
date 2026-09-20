@@ -3,28 +3,16 @@
  *
  * SPECT: docs/spects/spect007.md
  *
- * QUE SERA: recibe de guionSincrono el array de acciones ya resueltas de un
- * grupo y reproduce sus animaciones y efectos en paralelo. Devuelve una
- * promesa que se cumple cuando la ultima animacion del grupo ha terminado.
+ * Parte A: animaciones activas (lanzador).
+ * Parte B: animaciones pasivas (receptor: recibirDano, serCurado, morir…).
+ * Ambas van en el mismo Promise.all del grupo.
  *
- * La division con guionSincrono es de responsabilidad, no de tiempo: el guion
- * decide que pasa, el show cuenta como se ve. Los numeros ya estan calculados
- * cuando este archivo empieza a trabajar; aqui no se resta vida a nadie.
- *
- * Por que en paralelo dentro del grupo y en serie entre grupos: las acciones
- * de la misma velocidad ocurren a la vez, asi que se ven a la vez. Pero el
- * jugador tiene que entender por que el grupo siguiente se ejecuta o no, y
- * para eso necesita haber visto terminar el anterior.
- *
- * Rescatado de: classes/battle/controladorJugada.js (borrado).
- *
- * ESTADO: esqueleto con rescate. Revisar contra el spect 007.
+ * Aqui no se resta vida a nadie. Los numeros ya estan calculados.
  */
 
+import { fusionarAnimsParaShow } from './utilsEjecucion.js';
+
 // ─── RESCATE: controladorJugada.js lineas 260-280. Adaptado. ─────────────────
-// El contexto es lo que recibe la funcion de una accion como segundo argumento
-// (`ejecución(objetivo, contexto)`). El codigo viejo metia aqui la escena que
-// habia rastreado a mano; ahora se le pasa.
 
 export function crearContextoEjecucion(tarea, entorno) {
   return {
@@ -48,12 +36,34 @@ export async function ejecutarAccion(tarea, entorno) {
   if (resultado?.then) await resultado;
 }
 
-// ─── A CONSTRUIR ─────────────────────────────────────────────────────────────
-//
-// reproducirGrupo(acciones, entorno) -> Promise
-//   Lanza todas las animaciones del grupo a la vez y resuelve cuando la ultima
-//   termina. Promise.all sobre las animaciones, no un for con await: eso las
-//   pondria en fila y romperia la simultaneidad que pide la regla 10.
-//
-// El spect 007 define el contrato de una animacion y como se cancela si la
-// batalla termina a mitad de grupo.
+function contextoDeShow(entrada, entorno) {
+  const objetivo = entrada.tarea?.objetivo ?? null;
+  const destino = (objetivo && objetivo.x != null && !objetivo.estadisticas) ? objetivo : null;
+  return {
+    escena: entorno.escena,
+    tablero: entorno.tablero,
+    eventos: entorno.eventos,
+    tarea: entrada.tarea ?? null,
+    potestad: entrada.potestad ?? entrada.tarea?.potestad ?? null,
+    objetivo,
+    destino,
+    tamanoCasilla: entorno.tamanoCasilla ?? 400,
+  };
+}
+
+async function lanzarEntrada(entrada, entorno) {
+  if (!entrada?.reproducir) return;
+  const r = entrada.reproducir(contextoDeShow(entrada, entorno));
+  if (r?.then) await r;
+}
+
+/**
+ * Reproduce activas + pasivas del grupo en paralelo.
+ * @param {object} resultadoGrupo — de utilsEjecucion.armarResultadoGrupo
+ * @param {object} entorno — { escena, tablero, eventos }
+ */
+export function reproducirGrupo(resultadoGrupo, entorno) {
+  const entradas = fusionarAnimsParaShow(resultadoGrupo);
+  if (entradas.length === 0) return Promise.resolve();
+  return Promise.all(entradas.map((e) => lanzarEntrada(e, entorno)));
+}

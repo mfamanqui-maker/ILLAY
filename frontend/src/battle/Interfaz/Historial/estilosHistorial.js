@@ -1,0 +1,9 @@
+export const DEPTH_HISTORIAL = 9500;
+export const COLOR_FONDO = 0x0a0a0a;
+export const COLOR_BORDE = 0xe8c547;
+export const COLOR_BOTON = 0x1a1a1a;
+export const COLOR_TEXTO = '#f5f5f5';
+export const COLOR_SUBTEXTO = '#cccccc';
+export const COLOR_ALIADOS = '#7dce6a';
+export const COLOR_ENEMIGOS = '#e07a5f';
+export const COLOR_CANCELADA = '#e67e22';

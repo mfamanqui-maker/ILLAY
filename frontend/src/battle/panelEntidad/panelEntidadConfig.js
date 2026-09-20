@@ -7,15 +7,16 @@
  * para no ser afectado por zoom/pan del tablero.
  */
 
+/** Por encima del HUD (depth 9000): el panel es modal y no puede taparse. */
 export const DEPTHS = {
-  velo: 950,
-  fondo: 1000,
-  contenido: 1010,
-  scroll: 1015,
-  mask: 1020,
-  tooltip: 1030,
-  header: 1040,
-  botones: 1050,
+  velo: 9950,
+  fondo: 10000,
+  contenido: 10010,
+  scroll: 10015,
+  mask: 10020,
+  tooltip: 10030,
+  header: 10040,
+  botones: 10050,
 };
 
 export const COLORES = {

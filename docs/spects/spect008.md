@@ -9,7 +9,7 @@
 > 4. El tablero es base 1 hacia afuera. Solo `UtilsTablero` indexa en base 0.
 > 5. El azar se resuelve en el cliente dueno de la potestad al confirmar, **antes de enviar**, y el resultado viaja en el payload.
 > 6. La configuracion serializable es `{ id, nombreDeAccion, objetivo, azar }`. Las acciones viajan por nombre, nunca como funcion.
-> 7. PhaserMaster es dueno del estado, no del comportamiento: metodos de 15 lineas, archivo por debajo de 200.
+> 7. PhaserMaster es dueno del estado, no del comportamiento: metodos de 15 lineas, archivo por debajo de 300.
 > 8. `utilidadesDeSeleccion.js`: funciones puras, cero imports de Phaser.
 > 9. `IndexDePotestades.js` no importa panel, orbes ni show.
 > 10. Orden de fases por grupo de velocidad: cancelaciones, resolucion contra la foto, muertes, animacion. El guion no avanza hasta que el show termina.

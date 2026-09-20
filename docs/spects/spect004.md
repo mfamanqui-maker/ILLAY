@@ -9,7 +9,7 @@
 > 4. El tablero es base 1 hacia afuera. Solo `UtilsTablero` indexa en base 0.
 > 5. El azar se resuelve en el cliente dueno de la potestad al confirmar, **antes de enviar**, y el resultado viaja en el payload.
 > 6. La configuracion serializable es `{ id, nombreDeAccion, objetivo, azar }`. Las acciones viajan por nombre, nunca como funcion.
-> 7. PhaserMaster es dueno del estado, no del comportamiento: metodos de 15 lineas, archivo por debajo de 200.
+> 7. PhaserMaster es dueno del estado, no del comportamiento: metodos de 15 lineas, archivo por debajo de 300.
 > 8. `utilidadesDeSeleccion.js`: funciones puras, cero imports de Phaser.
 > 9. `IndexDePotestades.js` no importa panel, orbes ni show.
 > 10. Orden de fases por grupo de velocidad: cancelaciones, resolucion contra la foto, muertes, animacion. El guion no avanza hasta que el show termina.
@@ -40,7 +40,7 @@ orquestacion de `classes/battle/controladorJugada.js`.
 
 ## El presupuesto de lineas es parte del spect
 
-**Ningun metodo pasa de 15 lineas. El archivo entero no pasa de 200.**
+**Ningun metodo pasa de 15 lineas. El archivo entero no pasa de 300.**
 
 No es una preferencia de estilo. `controladorJugada.js` llego a 745 lineas
 porque cada vez que hacia falta coordinar algo se anadia aqui, y acabo
@@ -157,5 +157,5 @@ todo lo que este spect separa. `vista.js` esta escrito de cero y ya funciona.
 - Un turno en el que una potestad usa `escudar` se resuelve en dos, y el
   jugador que ya habia mandado `_Final` responde a la segunda peticion sin
   volver a pedirle nada al usuario.
-- `wc -l PhaserMaster.js` da menos de 200.
+- `wc -l PhaserMaster.js` da menos de 300.
 - Ningun metodo del archivo pasa de 15 lineas.

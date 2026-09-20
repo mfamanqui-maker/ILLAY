@@ -1,16 +1,14 @@
 {
-    "CURAR": "La potestad cura a un aliado dentro de su rango de accion.",
-    "ESCUDAR": "La potestad activa su escudo si algun enemigo realiza un ataque de tipo proyectil este sera anulado y se gastara un escudo de no ser el caso esta accion no hara nada.",
-    "ATACAR": "La potestad ataca a un enemigo dentro de su rango de accion.",
-    "PONER TRAMPA": "La potestad pone una trampa en la casilla seleccionada cuando un enemigo se mueve a ella esta le hara daño.",
-    "MOVERSE": "La potestad se mueve a la casilla seleccionada.",
-    "RITUAL": "La potestad realiza un ritual y obtiene 1 punto de anticristo.",
-    "PACTO": "La potestad obtiene un escudo pierde 1 punto de vida y un punto de anticristo pero todo el daño que reciba sera anulado.",
-    "MALDICION": "La potestad maldice a un enemigo objetivo y le hace mucho daño.",
-    "ESTUDIAR": "La potestad obtiene 1 punto de estudio.",
-    "APUNTAR": "La potestad gasta un punto de estudio y apuntara a un enemigo objetivo si este realiza una accion cualquiera recivira daño.",
-    "DISPARAR": "La potestad dispara una flecha a un enemigo objetivo perdera un punto de estudio y el enemigo recivira daño.",
-    "GENERAR MAGIA": "La potestad genera 1 punto de magia.",
-    "RAYO DE MAGIA": "La potestad dispara un rayo de magia a un enemigo objetivo perdera 3 puntos de magia y si el rayo impacto hara mucho daño.",
-    "ZOMBIOSIS": "La potestad reanimara a un aliado objetivo y recuperara 2 puntos de vida."
+    "CURAR": "La potestad cura a un aliado dentro de su rango de accion. velocidad: 0",
+    "ESCUDAR": "La potestad activa su escudo si algun enemigo realiza un ataque de tipo proyectil este sera anulado y se gastara un escudo de no ser el caso esta accion no hara nada. velocidad: 100",
+    "ATACAR": "La potestad ataca a un enemigo dentro de su rango de accion. velocidad: 50",
+    "RITUAL": "La potestad realiza un ritual y obtiene 1 punto de anticristo. velocidad: 0",
+    "PACTO": "La potestad obtiene un escudo pierde 1 punto de vida y un punto de anticristo pero todo el daño que reciba sera anulado. velocidad: 120",
+    "MALDICION": "La potestad maldice a un enemigo objetivo y le hace mucho daño. velocidad: 100",
+    "ESTUDIAR": "La potestad obtiene 1 punto de estudio. velocidad: 50",
+    "APUNTAR": "La potestad gasta un punto de estudio y apuntara a un enemigo objetivo si este realiza una accion cualquiera recivira daño. velocidad: 150",
+    "DISPARAR": "La potestad dispara una flecha a un enemigo objetivo perdera un punto de estudio y el enemigo recivira daño. velocidad: 50",
+    "GENERAR MAGIA": "La potestad genera 1 punto de magia. velocidad: 50",
+    "RAYO DE MAGIA": "La potestad dispara un rayo de magia a un enemigo objetivo perdera 3 puntos de magia y si el rayo impacto hara mucho daño. velocidad: 0",
+    "ZOMBIOSIS": "La potestad reanimara a un aliado objetivo y recuperara 2 puntos de vida. velocidad: 100"
 }

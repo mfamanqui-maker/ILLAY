@@ -1,3 +1,3 @@
 {
-    "TRAMPA": "Una trampa que puede ser activada por la potestad para infligir daño a un enemigo."
+    "PONER TRAMPA": "Coloca una trampa en una casilla. Cuando un enemigo pase por ella, la trampa explotará y le infligirá daño. velocidad: 50"
 }

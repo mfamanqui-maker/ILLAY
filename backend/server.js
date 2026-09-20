@@ -1,8 +1,31 @@
 const { WebSocketServer, WebSocket } = require('ws');
-const wss = new WebSocketServer({ port: 8080 });
+const PUERTO = Number(process.env.PORT) || 8080;
+const wss = new WebSocketServer({ port: PUERTO });
+
+/**
+ * Servidor-relevo del battle system (spect 010).
+ *
+ * No arbitra: no valida acciones, no conoce reglas, no tira dados.
+ * Un _Final describe la config de ese jugador, no el estado de la sala.
+ *
+ * Recibir no se dispara a ciegas: si el rival aun no mando esta ronda,
+ * el sobre va al buzon de su asiento y sale en su primer envio.
+ */
+
+/** Cabe dentro del TIEMPO_MAXIMO de esperarPartida (30s) para que
+ *  Partida_No_Encontrada llegue antes de que el cliente se rinda solo. */
+const TIEMPO_MAXIMO_COLA = 20000;
 
 const rooms = new Map();
-const clients = []
+const cola = [];
+
+/** Despachador: type del sobre -> manejador. Un type nuevo es una fila. */
+const DESPACHADOR = {
+    Buscar_Partida: buscarPartida,
+    Enviar_Config_Acciones: (ws, data) => reenviarConfig(ws, data, false),
+    Enviar_Config_Acciones_Final: (ws, data) => reenviarConfig(ws, data, true),
+    Partida_Finalizada: finalizarPartida,
+};
 
 wss.on('error', (error) => {
     console.log('error', error);
@@ -12,63 +35,233 @@ wss.on('close', () => {
     console.log('servidor cerrado');
 });
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws) => {
     console.log('estado del servidor', estadoServidor());
-    const ip = req.socket.remoteAddress;
 
-    ws.on('close', () => {
-        const i = clients.findIndex((c) => c.user === ws);
-        if (i !== -1) clients.splice(i, 1);
-    });
+    ws.on('close', () => alCerrar(ws));
 
     ws.on('message', (message) => {
-        let data;
+        let sobre;
         try {
-            data = JSON.parse(message);
+            sobre = JSON.parse(message);
         } catch {
             return;
         }
-        switch (data.type) {
-            case 'join_room':
-                const yo = { user: ws, data: data.data };
-                if (clients.length === 0) {
-                    clients.push(yo);
-                    break;
-                }
-                const otro = clients.shift();
-                const room = createRoom([otro, yo]);
-                rooms.set(room.id, room);
-                avisarSalaCreada(room);
-                break;
-            default:
-                console.log('mensaje desconocido', data);
-                break;
+        const manejador = DESPACHADOR[sobre.type];
+        if (!manejador) {
+            console.log('mensaje desconocido', sobre);
+            return;
         }
+        manejador(ws, sobre.data);
     });
 });
 
-/**
- * Crea una sala con los miembros proporcionados
- * @param {Array} miembros - Los miembros de la sala
- * @returns {Object} - La sala creada
- */
-function createRoom(miembros) { 
-    const room = {
-        id: crypto.randomUUID(),
-        miembros: miembros,
-        mensajes: [],
-        status: 'open',
+function buscarPartida(ws, data) {
+    if (enCola(ws) || salaDe(ws)) return;
+
+    const yo = { user: ws, data };
+    if (cola.length === 0) {
+        yo.idTemporizador = setTimeout(() => agotarCola(yo), TIEMPO_MAXIMO_COLA);
+        cola.push(yo);
+        return;
     }
-    return room;
+
+    const otro = cola.shift();
+    clearTimeout(otro.idTemporizador);
+    const room = crearSala([otro, yo]);
+    rooms.set(room.id, room);
+    avisarPartidaEncontrada(room);
+}
+
+function agotarCola(esperando) {
+    const i = cola.findIndex((c) => c.user === esperando.user);
+    if (i === -1) return;
+    cola.splice(i, 1);
+    enviar(esperando.user, 'Partida_No_Encontrada', null);
 }
 
 /**
- * Avisa a los 2 miembros: cada uno recibe el id de sala y el equipo del otro.
+ * Buzon por asiento. El rival no esta escuchando hasta que entra a
+ * negociar (escucha y luego manda). Si reenviamos antes, el frame se
+ * pierde. Si reenviamos siempre al mandar nosotros, el que ya escuchaba
+ * recibe dos Recibir y el segundo envenena la ronda siguiente.
+ *
+ * Live al que ya mando esta ronda. Al que no: se guarda. Al primer
+ * envio propio se vacia el buzon (catch-up de una vez).
  */
-function avisarSalaCreada(room) {
+function reenviarConfig(ws, configuracion, esFinal) {
+    const room = salaDe(ws);
+    if (!room || room.status !== 'open') return;
+
+    const yo = miembroDe(room, ws);
+    const rival = rivalDe(room, ws);
+    if (!yo || !rival) return;
+
+    const primerEnvio = room.configuraciones[yo.clave] == null;
+    room.configuraciones[yo.clave] = configuracion;
+    room.finalizado[yo.clave] = Boolean(esFinal);
+
+    const type = esFinal
+        ? 'Recibir_Config_Acciones_Final'
+        : 'Recibir_Config_Acciones';
+
+    if (room.configuraciones[rival.clave] != null) {
+        enviar(rival.user, type, configuracion);
+    } else {
+        room.buzon[rival.clave].push({ type, data: configuracion });
+    }
+
+    if (primerEnvio) {
+        for (const msg of room.buzon[yo.clave]) {
+            enviar(yo.user, msg.type, msg.data);
+        }
+        room.buzon[yo.clave] = [];
+    }
+
+    if (room.finalizado.jugadorA && room.finalizado.jugadorB) {
+        resetearRonda(room);
+    }
+}
+
+/**
+ * Combina las dos declaraciones. No mira el tablero.
+ * victoria+victoria → empate. derrota primero (rendirse) cierra ya.
+ */
+function finalizarPartida(ws, resultado) {
+    const room = salaDe(ws);
+    if (!room || room.status !== 'open') return;
+
+    const yo = miembroDe(room, ws);
+    if (!yo || room.declaraciones[yo.clave] != null) return;
+
+    const valor = extraerResultado(resultado);
+    room.declaraciones[yo.clave] = valor;
+
+    const otraClave = yo.clave === 'jugadorA' ? 'jugadorB' : 'jugadorA';
+    const otroValor = room.declaraciones[otraClave];
+
+    if (valor === 'derrota' && otroValor == null) {
+        const rival = rivalDe(room, ws);
+        enviar(ws, 'Resultado_Partida', 'derrota');
+        if (rival) enviar(rival.user, 'Resultado_Partida', 'victoria');
+        cerrarSala(room);
+        return;
+    }
+
+    if (otroValor == null) return;
+
+    const [resA, resB] = resolverDeclaraciones(
+        room.declaraciones.jugadorA,
+        room.declaraciones.jugadorB,
+    );
     const [a, b] = room.miembros;
-    enviar(a.user, 'room_created', { id: room.id, rival: b.data });
-    enviar(b.user, 'room_created', { id: room.id, rival: a.data });
+    enviar(a.user, 'Resultado_Partida', resA);
+    enviar(b.user, 'Resultado_Partida', resB);
+    cerrarSala(room);
+}
+
+function alCerrar(ws) {
+    const i = cola.findIndex((c) => c.user === ws);
+    if (i !== -1) {
+        clearTimeout(cola[i].idTemporizador);
+        cola.splice(i, 1);
+        return;
+    }
+
+    const room = salaDe(ws);
+    if (!room) return;
+    const rival = rivalDe(room, ws);
+    if (rival) enviar(rival.user, 'Resultado_Partida', 'victoria');
+    cerrarSala(room);
+}
+
+function crearSala(miembros) {
+    return {
+        id: crypto.randomUUID(),
+        miembros: [
+            { ...miembros[0], clave: 'jugadorA' },
+            { ...miembros[1], clave: 'jugadorB' },
+        ],
+        ronda: 1,
+        configuraciones: { jugadorA: null, jugadorB: null },
+        finalizado: { jugadorA: false, jugadorB: false },
+        buzon: { jugadorA: [], jugadorB: [] },
+        declaraciones: { jugadorA: null, jugadorB: null },
+        status: 'open',
+    };
+}
+
+function avisarPartidaEncontrada(room) {
+    const [a, b] = room.miembros;
+    a.data.equipo.Aliados.forEach(personaje => {
+        personaje.id = crypto.randomUUID();
+    });
+    b.data.equipo.Aliados.forEach(personaje => {
+        personaje.id = crypto.randomUUID();
+    });
+    enviar(a.user, 'Partida_Encontrada', { id: room.id, rival: b.data, aliados: a.data });
+    enviar(b.user, 'Partida_Encontrada', { id: room.id, rival: a.data, aliados: b.data });
+}
+
+function resetearRonda(room) {
+    room.ronda += 1;
+    room.configuraciones = { jugadorA: null, jugadorB: null };
+    room.finalizado = { jugadorA: false, jugadorB: false };
+    room.buzon = { jugadorA: [], jugadorB: [] };
+}
+
+function cerrarSala(room) {
+    room.status = 'cerrada';
+    rooms.delete(room.id);
+}
+
+function enCola(ws) {
+    return cola.some((c) => c.user === ws);
+}
+
+function salaDe(ws) {
+    for (const room of rooms.values()) {
+        if (room.miembros.some((m) => m.user === ws)) return room;
+    }
+    return null;
+}
+
+function miembroDe(room, ws) {
+    return room.miembros.find((m) => m.user === ws);
+}
+
+function rivalDe(room, ws) {
+    return room.miembros.find((m) => m.user !== ws);
+}
+
+function extraerResultado(resultado) {
+    if (resultado && typeof resultado === 'object') return resultado.resultado;
+    return resultado;
+}
+
+function resolverDeclaraciones(a, b) {
+    if (a === 'victoria' && b === 'victoria') return ['empate', 'empate'];
+    if (a === 'empate' && b === 'empate') return ['empate', 'empate'];
+    if (a === 'victoria') return ['victoria', 'derrota'];
+    if (b === 'victoria') return ['derrota', 'victoria'];
+    return ['empate', 'empate'];
+}
+
+/**
+ * No decide quien gano. Solo refleja el veredicto del que cierra
+ * para el asiento contrario: victoria <-> derrota, empate se queda.
+ */
+function invertirResultado(resultado) {
+    const valor = resultado && typeof resultado === 'object'
+        ? resultado.resultado
+        : resultado;
+    const invertido = valor === 'victoria' ? 'derrota'
+        : valor === 'derrota' ? 'victoria'
+        : valor;
+    if (resultado && typeof resultado === 'object') {
+        return { ...resultado, resultado: invertido };
+    }
+    return invertido;
 }
 
 function enviar(ws, type, payload) {
@@ -79,13 +272,14 @@ function enviar(ws, type, payload) {
 
 function estadoServidor() {
     return {
-        enCola: clients.length,
+        enCola: cola.length,
         salas: [...rooms.values()].map((r) => ({
             id: r.id,
             miembros: r.miembros.length,
-            mensajes: r.mensajes.length,
+            ronda: r.ronda,
+            finalizado: r.finalizado,
             status: r.status,
         })),
         socketsVivos: wss.clients.size,
-    }
+    };
 }

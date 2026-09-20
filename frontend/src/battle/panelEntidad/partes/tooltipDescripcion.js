@@ -41,7 +41,7 @@ export function crearTooltipDescripcion(scene, opciones) {
   const { x, y, ancho, alto, padre, medirTexto } = opciones;
   const padding = LADO_IZQUIERDO.tooltipPadding;
 
-  const container = scene.add.container(x, y);
+  const container = scene.add.container(Math.round(x), Math.round(y));
   container.setDepth(DEPTHS.tooltip);
   padre.add(container);
 

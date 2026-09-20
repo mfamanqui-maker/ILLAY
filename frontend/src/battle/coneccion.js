@@ -3,100 +3,233 @@
  *
  * SPECT: docs/spects/spect010.md
  *
- * QUE SERA: la unica pieza que sabe hablar con el servidor. Vive dentro de
+ * QUE ES: la unica pieza que sabe hablar con el servidor. Vive dentro de
  * battle/ para que el sistema traiga su propia conexion y se pueda copiar a
- * otro proyecto de una pieza. system/characterSelectScene.js lo importa desde
- * aqui para el emparejamiento; PhaserMaster lo usa para el bucle de rondas.
+ * otro proyecto de una pieza. characterSelectScene lo importa desde aqui
+ * para el emparejamiento; PhaserMaster lo usa para el bucle de rondas.
  *
- * El socket es un singleton de modulo: los dos comparten la misma conexion, y
- * eso es intencionado. El emparejamiento y la batalla son la misma sesion.
+ * El socket es un singleton de modulo: emparejamiento y batalla son la
+ * misma sesion. El negociador recibe el objeto `transporte`, no el socket:
+ * sustituir el WebSocket por una IA local no deberia tocar nada mas.
  *
- * QUE TIENE QUE CAMBIAR EL SPECT 010:
+ * Invariantes:
+ *   - Todo mensaje es { type, data }. Sin excepciones.
+ *   - Los type son exactamente los de AGENTS.md.
+ *   - esperar() siempre termina: resuelve, o rechaza por tiempo o parseo.
+ *   - Un _Final propio no cierra la escucha del rival.
  *
- *   1. Los nombres. Hoy son join_room y room_created, inventados sobre la
- *      marcha. El protocolo de AGENTS.md dice Buscar_Partida,
- *      Partida_Encontrada, Enviar_Config_Acciones, Recibir_Config_Acciones y
- *      las variantes _Final.
- *
- *   2. Faltan las rondas enteras. Hoy no existe ningun mensaje de
- *      configuracion de acciones: el rival era un JSON escrito a mano.
- *
- *   3. FUGA DE LISTENERS en esperar(). El Glosario.md ya la denuncia por su
- *      nombre. Mirando el codigo de abajo: onMessage se anade siempre, pero
- *      solo se quita cuando el tipo coincide. Si el parseo falla se hace
- *      reject SIN quitarlo, y si la promesa nunca se cumple el oyente se queda
- *      para siempre. En un bucle que llama a esperar() una vez por ronda, eso
- *      se acumula durante toda la partida.
- *
- *   4. enviarMensaje() lee socket.readyState sin comprobar que socket exista:
- *      si se llama antes de coneccion(), revienta con un TypeError.
- *
- * ESTADO: rescate sin adaptar. Funciona para el emparejamiento actual.
+ * ESTADO: primitivas, API de protocolo y buzon de entrada. El servidor
+ * reenvia con los type de AGENTS.md y guarda Recibir hasta que el rival
+ * entra en la ronda.
  */
 
+const TIEMPO_MAXIMO_POR_DEFECTO = 30000;
+
 let socket = null;
+/** Cola FIFO de sobres. Un solo oyente permanente; esperar() consume.
+ *  Sin esto, un Recibir que llega antes del listener se pierde. */
+const buzon = [];
+const esperas = [];
+
+/**
+ * Sobre del protocolo: type dice que es, data es la carga.
+ * Un helper evita que alguien mande el payload suelto, sin type.
+ */
+function sobre(type, data) {
+    return { type, data };
+}
+
+function exigirSocketAbierto() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        throw new Error('No hay conexion. Llama a coneccion() primero.');
+    }
+}
 
 /*
-    Esta función se encarga de la coneccion con el servidor de websockets.
-    y administra el estado de la coneccion.
+    Abre el socket si no esta abierto. Quien ya lo tiene reusa el mismo.
 */
 export function coneccion() {
     if (socket?.readyState === WebSocket.OPEN) return Promise.resolve();
-    return new Promise((resolve, reject) => { 
-        socket = new WebSocket('ws://localhost:8080');
+    return new Promise((resolve, reject) => {
+        socket = new WebSocket('wss://chasing-uncharted-ambiance.ngrok-free.dev');
+        socket.addEventListener('message', alMensaje);
         socket.addEventListener('open', () => {
             resolve();
         });
         socket.addEventListener('close', () => {
             console.error('Coneccion cerrada');
         });
-
         socket.addEventListener('error', (e) => {
             console.error('Error de coneccion', e);
             reject(e);
-        }); 
+        });
     });
 }
 
-/*
-    Esta función se encarga de enviar mensajes al servidor.
-    @param {Object} mensaje - El mensaje a enviar al servidor.
-    @returns {Promise} - La promesa que resuelve cuando el mensaje es enviado.
-*/
-export function enviarMensaje(mensaje) {
-    if (socket?.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(mensaje));
-    } else {
-        console.error('No se puede enviar mensaje, la coneccion no esta abierta');
+function alMensaje(message) {
+    let recibido;
+    try {
+        recibido = JSON.parse(message.data);
+    } catch (error) {
+        const espera = esperas.shift();
+        if (!espera) return;
+        espera.limpiar();
+        espera.reject(error);
+        return;
+    }
+    buzon.push(recibido);
+    entregarDelBuzon();
+}
+
+function entregarDelBuzon() {
+    for (let i = 0; i < esperas.length; i += 1) {
+        const espera = esperas[i];
+        const idx = buzon.findIndex((m) => espera.tipos.includes(m.type));
+        if (idx === -1) continue;
+        const recibido = buzon.splice(idx, 1)[0];
+        esperas.splice(i, 1);
+        espera.limpiar();
+        resolverEspera(espera, recibido);
+        i -= 1;
     }
 }
 
+function resolverEspera(espera, recibido) {
+    if (espera.tipos.length === 1) {
+        espera.resolve(recibido.data);
+        return;
+    }
+    espera.resolve({ type: recibido.type, data: recibido.data });
+}
+
 /*
-    Esta función se encarga de recibir mensajes del servidor.
-    @param {string} type - El tipo de mensaje a recibir.
-    @returns {Promise} - La promesa que resuelve con el mensaje recibido.
+    Envia un sobre { type, data }. Sin socket abierto el mensaje se perdia
+    en un console.error; ahora falla en voz alta para que el llamador lo vea.
 */
-export function esperar(type) {
+export function enviarMensaje(mensaje) {
+    exigirSocketAbierto();
+    socket.send(JSON.stringify(mensaje));
+}
+
+/*
+    Espera un type, o el primero de una lista. Lee el buzon antes de
+    bloquearse: el oyente permanente ya guardo lo que llego temprano.
+    El timeout sigue siendo el cierre si nadie manda. Un type resuelve
+    data. Varios resuelven { type, data }.
+*/
+export function esperar(tipo, tiempoMaximo = TIEMPO_MAXIMO_POR_DEFECTO) {
+    const tipos = Array.isArray(tipo) ? tipo : [tipo];
     return new Promise((resolve, reject) => {
-        function onMessage(message) {
-            try {
-                const data = JSON.parse(message.data);
-                if (data.type === type) {
-                    socket.removeEventListener('message', onMessage);
-                    resolve(data.data);
-                }
-            } catch (error) {
-                console.error('Error al parsear el mensaje', error);
-                reject(error);
-            }
+        if (!socket) {
+            reject(new Error('No hay conexion. Llama a coneccion() primero.'));
+            return;
         }
-        socket.addEventListener('message', onMessage);
+
+        let terminado = false;
+        let idTiempo;
+        const espera = { tipos, resolve, reject, limpiar };
+
+        function limpiar() {
+            if (terminado) return;
+            terminado = true;
+            clearTimeout(idTiempo);
+        }
+
+        const idx = buzon.findIndex((m) => tipos.includes(m.type));
+        if (idx !== -1) {
+            const recibido = buzon.splice(idx, 1)[0];
+            resolverEspera(espera, recibido);
+            return;
+        }
+
+        idTiempo = setTimeout(() => {
+            const i = esperas.indexOf(espera);
+            if (i !== -1) esperas.splice(i, 1);
+            limpiar();
+            reject(new Error(`Tiempo agotado esperando ${tipos.join(', ')}`));
+        }, tiempoMaximo);
+
+        esperas.push(espera);
     });
 }
 
 /*
-    Esta función se encarga de cerrar la coneccion con el servidor.
+    Cierra si hay socket. Sin guarda, socket.close() revienta con TypeError.
 */
 export function cerrarConeccion() {
+    if (!socket) return;
+    socket.removeEventListener('message', alMensaje);
     socket.close();
+    buzon.length = 0;
+    esperas.length = 0;
 }
+
+/** El negociador pregunta esto, no el readyState del socket. */
+export function estaConectado() {
+    return socket?.readyState === WebSocket.OPEN;
+}
+
+export function buscarPartida(equipo) {
+    enviarMensaje(sobre('Buscar_Partida', { equipo }));
+}
+
+export function esperarPartida() {
+    return esperar(['Partida_Encontrada', 'Partida_No_Encontrada']);
+}
+
+export function enviarConfigAcciones(configuracion) {
+    enviarMensaje(sobre('Enviar_Config_Acciones', configuracion));
+}
+
+export function enviarConfigAccionesFinal(configuracion) {
+    enviarMensaje(sobre('Enviar_Config_Acciones_Final', configuracion));
+}
+
+/** Delegado de PhaserMaster._enviarConfiguracion: esFinal elige el type. */
+export function enviarConfiguracion(configuracion, esFinal) {
+    if (esFinal) {
+        enviarConfigAccionesFinal(configuracion);
+        return;
+    }
+    enviarConfigAcciones(configuracion);
+}
+
+/**
+ * Escucha al rival sin asumir que ya cerro. Resultado_Partida entra para
+ * que una pestana cerrada no deje esta promesa abierta.
+ */
+export async function recibirConfigDelRival() {
+    const respuesta = await esperar([
+        'Recibir_Config_Acciones',
+        'Recibir_Config_Acciones_Final',
+        'Resultado_Partida',
+    ]);
+    return {
+        type: respuesta.type,
+        data: respuesta.data,
+        esFinal: respuesta.type === 'Recibir_Config_Acciones_Final',
+    };
+}
+
+export function enviarPartidaFinalizada(resultado) {
+    enviarMensaje(sobre('Partida_Finalizada', resultado));
+}
+
+export function esperarResultadoPartida() {
+    return esperar('Resultado_Partida');
+}
+
+/** Superficie inyectable. PhaserMaster recibe esto, no el socket. */
+export const transporte = {
+    coneccion,
+    estaConectado,
+    buscarPartida,
+    esperarPartida,
+    enviarConfigAcciones,
+    enviarConfigAccionesFinal,
+    enviarConfiguracion,
+    recibirConfigDelRival,
+    enviarPartidaFinalizada,
+    esperarResultadoPartida,
+    cerrarConeccion,
+};

@@ -19,24 +19,33 @@ import { DEPTHS } from '../panelEntidadConfig.js';
 
 export function crearListaScrollable(scene, opciones) {
   const { x, y, ancho, alto, padre } = opciones;
+  const holgura = Number(opciones.holgura ?? 0);
+  const depth = opciones.depth ?? DEPTHS.scroll;
 
   const contenedorViewport = scene.add.container(x, y);
-  contenedorViewport.setDepth(DEPTHS.scroll);
+  contenedorViewport.setDepth(depth);
   padre.add(contenedorViewport);
+  if (opciones.scrollFactor != null) {
+    contenedorViewport.setScrollFactor(opciones.scrollFactor);
+  }
 
   const contenidoInterno = scene.add.container(0, 0);
   contenedorViewport.add(contenidoInterno);
+  if (opciones.scrollFactor != null) {
+    contenidoInterno.setScrollFactor(opciones.scrollFactor);
+  }
 
-  // Posición real en pantalla del viewport (soporta cualquier anidamiento de
-  // containers). El panel usa scrollFactor 0, así que tx/ty equivalen a px de
-  // pantalla.
+  // La máscara se calcula DESPUES de colgar el viewport del padre, y con
+  // holgura: el texto de Phaser se recorta en el borde exacto del rectángulo.
   const matriz = contenedorViewport.getWorldTransformMatrix();
-  const maskRectX = matriz.tx;
-  const maskRectY = matriz.ty;
+  const maskRectX = matriz.tx - holgura;
+  const maskRectY = matriz.ty - holgura;
+  const maskAncho = ancho + holgura * 2;
+  const maskAlto = alto + holgura * 2;
 
   const maskShape = scene.make.graphics({ x: 0, y: 0, add: false });
   maskShape.fillStyle(0xffffff, 1);
-  maskShape.fillRect(maskRectX, maskRectY, ancho, alto);
+  maskShape.fillRect(maskRectX, maskRectY, maskAncho, maskAlto);
   const mask = maskShape.createGeometryMask();
   contenidoInterno.setMask(mask);
 
@@ -83,10 +92,10 @@ export function crearListaScrollable(scene, opciones) {
 
     contieneCoordenadas(px, py) {
       return (
-        px >= maskRectX &&
-        px <= maskRectX + ancho &&
-        py >= maskRectY &&
-        py <= maskRectY + alto
+        px >= maskRectX + holgura &&
+        px <= maskRectX + holgura + ancho &&
+        py >= maskRectY + holgura &&
+        py <= maskRectY + holgura + alto
       );
     },
 

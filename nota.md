@@ -5,6 +5,7 @@ hacer cualquier cosa se debe de afinar los valores antes de hacer cualquier cosa
 
 iniciar el servidor con node backend/server.js
 ver archibos ocultos "files.exclude".
+abrir archibo desde la terminal: explorer.exe .
 
 ```
 /**

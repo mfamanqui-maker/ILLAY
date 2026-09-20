@@ -4,8 +4,9 @@
  * Solo se usa la fuente ASCII de `text.png` (panel). Cada carácter ocupa una
  * celda fija en una rejilla de 16 columnas; el frame se calcula por código ASCII.
  *
- * `tint` se aplica a cada letra al dibujar: como el PNG es un texto de un único
- * color sobre transparente, teñir a negro lo oscurece por completo.
+ * `tint` se cuece en el canvas (source-atop): el PNG es un único color sobre
+ * transparente, teñir a negro lo oscurece por completo. No se usa setOrigin
+ * fraccionario sobre la imagen: el ancla se aplica desplazando en píxeles.
  */
 export const ESTILOS_TEXTO = {
   panel: {
