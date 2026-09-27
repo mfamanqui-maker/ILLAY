@@ -7,7 +7,9 @@
  * de esta clase. No se coloca sola: eso es de PotestadesTablero.
  */
 
-const ICONOS = 'assets/images/battle/Iconos/accion';
+import { FRAME } from '../../iconosAtlas.js';
+import { ponerEfecto, quitarEfecto } from '../efectosEstado.js';
+import { COSTES_DE_ACCION, puedePagarCoste } from '../acciones/diana.js';
 
 const LADO = 360;
 const FOTOGRAMAS = 8;
@@ -128,12 +130,14 @@ export class Realista {
     const nivel = this.nivel;
     this.listaDeAcciones = {
       habilidades: [
-        { nombre: 'escudar', rango: Infinity, velocidad: 100, condicional: stats.escudos > 0, ruta: `${ICONOS}/E_Wood03.png` , type: 'configtype1aliado'},
-        { nombre: 'atacar', rango: 2, velocidad: 50, condicional: true, ruta: `${ICONOS}/S_Sword01.png` , type: 'dianaEnemigo'},
+        { nombre: 'escudar', rango: Infinity, velocidad: 100, coste: COSTES_DE_ACCION.escudar, condicional: puedePagarCoste(stats, COSTES_DE_ACCION.escudar), frame: FRAME.escudar, type: 'configtype1aliado'},
+        { nombre: 'atacar', rango: 2, velocidad: 50, condicional: true, frame: FRAME.atacar, type: 'dianaEnemigo'},
       ],
       objetos: [],
       movimiento: [
-        { nombre: 'moverse', rango: 1, velocidad: 100, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` , type: 'dianaCasilla'},
+        { nombre: 'movilidad rapida', rango: 1, velocidad: 100, condicional: true, frame: FRAME.moverseRápido, type: 'dianaCasilla'},
+        { nombre: 'movilidad lenta', rango: 1, velocidad: 0, condicional: true, frame: FRAME.moverseNormal, type: 'dianaCasilla'},
+        { nombre: 'descansar', rango: Infinity, velocidad: 50, condicional: true, frame: FRAME.descansar, type: 'directo'},
       ],
     };
     return this.listaDeAcciones;
@@ -141,6 +145,61 @@ export class Realista {
 
   _claveDeTextura() {
     return `circulo_${this.constructor.arquetipo.toLowerCase()}_${String(this.bando).toLowerCase()}`;
+  }
+
+  _claveDeTexturaMuerto() {
+    return `${this._claveDeTextura()}_muerto`;
+  }
+
+  _texturaMuerto(escena) {
+    if (!escena?.textures) return null;
+    const clave = this._claveDeTexturaMuerto();
+    if (escena.textures.exists(clave)) return clave;
+    const textura = escena.textures.createCanvas(clave, LADO, LADO);
+    if (!textura) return null;
+    const ctx = textura.getContext();
+    if (this.bando === 'Aliados') {
+      ctx.translate(LADO, 0);
+      ctx.scale(-1, 1);
+    }
+    const cx = LADO / 2;
+    const cy = LADO / 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, RADIO_BASE, 0, Math.PI * 2);
+    ctx.fillStyle = '#000000';
+    ctx.fill();
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#000000';
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 42px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this.constructor.arquetipo, cx, cy);
+    textura.refresh();
+    return clave;
+  }
+
+  aplicarCuerpoMuerto(escena) {
+    this.muerta = true;
+    ponerEfecto(this, 'muerto');
+    const clave = this._texturaMuerto(escena);
+    if (clave && this.sprite?.setTexture) this.sprite.setTexture(clave);
+    this.sprite?.clearTint?.();
+    this.sprite?.setVisible?.(true);
+    this.sprite?.setAlpha?.(1);
+    this.sprite?.setScale?.(1);
+  }
+
+  aplicarCuerpoVivo(escena) {
+    this.muerta = false;
+    this._muerteAnimada = false;
+    quitarEfecto(this, 'muerto');
+    const clave = this._claveDeTextura();
+    if (escena?.textures?.exists(clave) && this.sprite?.setTexture) this.sprite.setTexture(clave);
+    this.sprite?.clearTint?.();
+    this.sprite?.setVisible?.(true);
+    this.sprite?.setAlpha?.(1);
   }
 
   AnimacionEstatica(escena) {
@@ -192,6 +251,7 @@ export class Realista {
       serCurado: (ctx) => this._animSerCurado(ctx),
       escudar: (ctx) => this._animEscudar(ctx),
       atacar: (ctx) => this._animAtacar(ctx),
+      descansar: (ctx) => this._animDescansar(ctx),
       recibirDano: (ctx) => this._animRecibirDano(ctx),
       morir: (ctx) => this._animMorir(ctx),
     };
@@ -211,6 +271,25 @@ export class Realista {
     explotar(escena, punto.x, punto.y, 0x9be36b, 22, 520);
     const blanco = contexto?.objetivo?.sprite ?? this.sprite;
     return tweenPromise(escena, { targets: blanco, alpha: 0.7, yoyo: true, duration: 160 });
+  }
+
+  _animDescansar(contexto) {
+    const escena = contexto?.escena;
+    const origen = this.sprite ?? { x: 0, y: 0 };
+    if (!escena?.add) return Promise.resolve();
+    const emisor = escena.add.particles(origen.x, origen.y, PARTICULA, {
+      speed: { min: 10, max: 36 },
+      lifespan: 640,
+      angle: { min: 250, max: 290 },
+      gravityY: -40,
+      tint: 0x9aa0a6,
+      scale: { start: 0.4, end: 0 },
+      emitting: false,
+    });
+    emisor.setDepth(12);
+    emisor.explode(22);
+    escena.time.delayedCall(700, () => emisor.destroy());
+    return tweenPromise(escena, { targets: this.sprite, alpha: 0.75, yoyo: true, duration: 220 });
   }
 
   _animEscudar(contexto) {
@@ -253,8 +332,8 @@ export class Realista {
     const escena = contexto?.escena;
     if (!this.sprite) return Promise.resolve();
     explotar(escena, this.sprite.x, this.sprite.y, this.constructor.color, 28, 600);
-    return tweenPromise(escena, { targets: this.sprite, alpha: 0, scale: 0.4, duration: 360 })
-      .then(() => { this.sprite?.setVisible(false); });
+    this.aplicarCuerpoMuerto(escena);
+    return tweenPromise(escena, { targets: this.sprite, scale: 1.08, yoyo: true, duration: 220 });
   }
 }
 

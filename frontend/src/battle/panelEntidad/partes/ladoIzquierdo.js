@@ -55,6 +55,14 @@ export function crearLadoIzquierdo(scene, opciones) {
     });
   };
 
+  const tv = rects.textoVida;
+  let textoVida = null;
+  const hpNoNegativo = (valor, minimo = 0) => {
+    const n = Number(valor);
+    if (!Number.isFinite(n)) return minimo;
+    return Math.max(0, n);
+  };
+
   // ── Barra de vida (imagen) ─────────────────────────────────────────────
   const b = rects.barra;
   const barra = crearBarraVidaImagen(scene, {
@@ -64,22 +72,19 @@ export function crearLadoIzquierdo(scene, opciones) {
     alto: b.alto,
     claveLlena: ASSETS.barraLlena.clave,
     claveVacia: ASSETS.barraVacia.clave,
-    vidaActual: datosIniciales?.vida?.vidaActual ?? 0,
-    vidaMaxima: datosIniciales?.vida?.vidaMaxima ?? 1,
+    vidaActual: hpNoNegativo(datosIniciales?.vida?.vidaActual),
+    vidaMaxima: hpNoNegativo(datosIniciales?.vida?.vidaMaxima, 1),
     origen: 0,
     depth: DEPTHS.contenido + 1,
   });
   container.add(barra);
 
-  // ── Texto de vida ──────────────────────────────────────────────────────
-  const tv = rects.textoVida;
-  let textoVida = null;
   const fijarTextoVida = (vidaActual, vidaMaxima) => {
     if (textoVida) {
       textoVida.destroy();
       textoVida = null;
     }
-    textoVida = crearTexto(scene, `${vidaActual} - ${vidaMaxima}`, {
+    textoVida = crearTexto(scene, `${hpNoNegativo(vidaActual)} - ${hpNoNegativo(vidaMaxima, 1)}`, {
       x: tv.x + tv.ancho / 2,
       y: tv.y + tv.alto / 2,
       estilo: LADO_IZQUIERDO.textoVidaEstilo,
@@ -147,8 +152,8 @@ export function crearLadoIzquierdo(scene, opciones) {
       }
       if (nuevosDatos?.vida) {
         const { vidaActual, vidaMaxima } = nuevosDatos.vida;
-        barra.actualizarVida(vidaActual ?? 0, vidaMaxima ?? 1);
-        fijarTextoVida(vidaActual ?? 0, vidaMaxima ?? 1);
+        barra.actualizarVida(hpNoNegativo(vidaActual), hpNoNegativo(vidaMaxima, 1));
+        fijarTextoVida(vidaActual, vidaMaxima);
       }
     },
   };

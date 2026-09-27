@@ -111,6 +111,8 @@ export default class GenerarInterfaz extends Phaser.Scene {
     this.eventos?.on('faseCambiada', this._onFaseCambiada);
 
     this._onBatallaTerminada = (payload) => {
+      ocultarEsperaRival();
+      this._bloqueadoPorEspera = false;
       mostrarFinalidad(this, {
         ...payload,
         onHistorial: () => this._emitirEvento('historial'),

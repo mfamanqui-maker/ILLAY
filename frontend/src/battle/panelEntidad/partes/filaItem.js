@@ -1,8 +1,6 @@
 /**
  * Fila individual para listas: [icono] NOMBRE  CANTIDAD.
- * Sin `imagen` de acción se usa la vela. `item.tinte` la colorea por categoría.
- *
- * Devuelve un container ya posicionado en (0, 0) relativo al padre que lo agregue.
+ * Con `frame` (y `hoja` en efectos) sale del spritesheet. Si no, la vela tintada.
  */
 
 import { crearTexto } from '../GenerarTexto/index.js';
@@ -10,44 +8,42 @@ import {
   COLORES,
   DEPTHS,
   LISTAS,
-  claveTexturaImagen,
   ICONO_FALLBACK,
   CLAVE_ICONO_FALLBACK,
 } from '../panelEntidadConfig.js';
+import { resolverIcono } from '../../iconosAtlas.js';
 
-function cargarImagen(scene, ruta, onCargada) {
-  if (!ruta) return;
-  const clave = claveTexturaImagen(ruta);
-  if (scene.textures.exists(clave)) {
-    onCargada(clave);
+function pintarVela(scene, container, item, x, y) {
+  const clave = scene.textures.exists(CLAVE_ICONO_FALLBACK)
+    ? CLAVE_ICONO_FALLBACK
+    : null;
+  if (!clave) {
+    if (!scene.textures.exists(CLAVE_ICONO_FALLBACK)) {
+      scene.load.image(CLAVE_ICONO_FALLBACK, ICONO_FALLBACK);
+      scene.load.once('complete', () => pintarVela(scene, container, item, x, y));
+      if (!scene.load.isLoading()) scene.load.start();
+    }
     return;
   }
-  scene.load.image(clave, ruta);
-  scene.load.once('complete', () => {
-    if (scene.textures.exists(clave)) onCargada(clave);
-  });
-  if (!scene.load.isLoading()) scene.load.start();
+  if (!container.active) return;
+  const iconoImg = scene.add.image(x, y, clave);
+  iconoImg.setDisplaySize(LISTAS.iconoTam, LISTAS.iconoTam);
+  iconoImg.setDepth(DEPTHS.contenido + 2);
+  if (item?.tinte != null) iconoImg.setTint(item.tinte);
+  container.add(iconoImg);
 }
 
 function colocarIcono(scene, container, item, x, y) {
-  const pintar = (clave) => {
-    if (!container.active || !scene.textures.exists(clave)) return;
-    const iconoImg = scene.add.image(x, y, clave);
+  const icono = resolverIcono(item);
+  if (icono && scene.textures.exists(icono.clave)) {
+    const iconoImg = scene.add.image(x, y, icono.clave, icono.frame);
     iconoImg.setDisplaySize(LISTAS.iconoTam, LISTAS.iconoTam);
     iconoImg.setDepth(DEPTHS.contenido + 2);
-    if (item?.tinte != null) iconoImg.setTint(item.tinte);
+    if (icono.tipo === 'efecto' && item?.tinte != null) iconoImg.setTint(item.tinte);
     container.add(iconoImg);
-  };
-
-  if (item?.imagen) {
-    cargarImagen(scene, item.imagen, pintar);
     return;
   }
-  if (scene.textures.exists(CLAVE_ICONO_FALLBACK)) {
-    pintar(CLAVE_ICONO_FALLBACK);
-    return;
-  }
-  cargarImagen(scene, ICONO_FALLBACK, pintar);
+  pintarVela(scene, container, item, x, y);
 }
 
 export function crearFilaItem(scene, opciones) {

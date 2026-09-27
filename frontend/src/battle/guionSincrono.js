@@ -12,12 +12,18 @@
 
 import { crearPilaPasivas } from './pilaPasivas.js';
 import {
+  aplicarMovimientosSimultaneos,
+  reconciliarPosicionesEnTablero,
+  resolverColisionesDeMovimiento,
+} from './tablero/UtilsTablero.js';
+import {
   armarResultadoGrupo,
   entradaAnimActiva,
   entradaAnimPasiva,
   claveAnimPasiva,
   tareasNoAnuladas,
 } from './utilsEjecucion.js';
+import { ponerEfecto, quitarEfecto } from './datosDePotestades/efectosEstado.js';
 
 function obtenerDeRegistro(registro, id) {
   if (id == null || !registro?.obtenerPorId) return undefined;
@@ -164,27 +170,34 @@ function fotoDe(foto, id) {
 
 /** Delta contra la foto del grupo: lo que el registro de jugadas tiene que guardar. */
 function efectoDeTarea(tarea, foto) {
+  const efecto = {};
   const obj = typeof tarea.objetivo === 'object' && tarea.objetivo?.estadisticas
     ? tarea.objetivo
     : null;
   if (obj) {
-    const prev = fotoDe(foto, obj.id);
-    if (prev) {
-      const dHp = Number(obj.estadisticas.hp) - Number(prev.hp);
-      if (dHp) return { hp: dHp };
+    const prevObj = fotoDe(foto, obj.id);
+    if (prevObj) {
+      const dHp = Number(obj.estadisticas.hp) - Number(prevObj.hp);
+      if (dHp) efecto.hp = dHp;
     }
   }
   const lanzador = tarea.potestad;
-  if (!lanzador?.estadisticas) return null;
+  if (!lanzador?.estadisticas) return Object.keys(efecto).length ? efecto : null;
   const prev = fotoDe(foto, lanzador.id);
-  if (!prev) return null;
-  const efecto = {};
-  const dHp = Number(lanzador.estadisticas.hp) - Number(prev.hp);
-  if (dHp) efecto.hp = dHp;
+  if (!prev) return Object.keys(efecto).length ? efecto : null;
+  if (efecto.hp == null) {
+    const dHp = Number(lanzador.estadisticas.hp) - Number(prev.hp);
+    if (dHp) efecto.hp = dHp;
+  }
   const pos = lanzador.datos?.posicion;
   if (pos && prev.posicion && (Number(pos.x) !== prev.posicion.x || Number(pos.y) !== prev.posicion.y)) {
     efecto.posicion = { x: Number(pos.x), y: Number(pos.y) };
   }
+  const statsPrev = prev.estadisticas ?? {};
+  ['magia', 'conocimiento'].forEach((clave) => {
+    const d = Number(lanzador.estadisticas[clave] ?? 0) - Number(statsPrev[clave] ?? 0);
+    if (d) efecto[clave] = d;
+  });
   return Object.keys(efecto).length ? efecto : null;
 }
 
@@ -196,31 +209,85 @@ function idObjetivoTarea(tarea) {
   return o;
 }
 
+function nombreDeTarea(tarea) {
+  return String(tarea?.accion?.nombre ?? tarea?.nombreDeAccion ?? '').trim();
+}
+
+function esMovilidadNombre(nombre) {
+  const n = String(nombre ?? '').trim().toLowerCase();
+  return n === 'moverse' || n === 'movilidad rapida' || n === 'movilidad lenta';
+}
+
 function esAtaqueProyectil(tarea) {
-  const nombre = tarea?.accion?.nombre ?? tarea?.nombreDeAccion ?? '';
-  const tipo = String(tarea?.accion?.tipo ?? '').toLowerCase();
-  return tipo.includes('enemigo') || ['atacar', 'rayoDeMagia', 'disparar', 'maldicion'].includes(nombre);
+  const nombre = nombreDeTarea(tarea).toLowerCase().replace(/\s+/g, '');
+  const tipo = String(tarea?.accion?.tipo ?? tarea?.accion?.type ?? '').toLowerCase();
+  return tipo.includes('enemigo')
+    || ['atacar', 'rayodemagia', 'disparar', 'maldicion'].includes(nombre);
+}
+
+function blancoDeTarea(tarea) {
+  const o = tarea?.objetivo;
+  return (o && typeof o === 'object' && o.estadisticas) ? o : null;
+}
+
+function soltarCaza(registro, marca) {
+  const cazador = obtenerDeRegistro(registro, marca?.idCazador)?.potestad;
+  if (!cazador) return;
+  cazador.cazaActiva = false;
+  if (cazador.estadisticas) cazador.estadisticas.apuntando = null;
+  quitarEfecto(cazador, 'caza');
+}
+
+function aplicarMarcaApuntarPorMovimiento(tarea, registro) {
+  const marcado = tarea?.potestad;
+  if (!marcado?.marcadoApuntar || !marcado.estadisticas) return false;
+  if (!esMovilidadNombre(nombreDeTarea(tarea))) return false;
+  const marca = marcado.marcadoApuntar;
+  if (marcado.pactoActivo) {
+    marcado.marcadoApuntar = null;
+    soltarCaza(registro, marca);
+    return false;
+  }
+  const dano = Number(marca.dano ?? 3);
+  marcado.estadisticas.hp = Number(marcado.estadisticas.hp ?? 0) - dano;
+  marcado.marcadoApuntar = null;
+  soltarCaza(registro, marca);
+  return true;
+}
+
+function esRayoDeMagia(tarea) {
+  return nombreDeTarea(tarea).toLowerCase().replace(/\s+/g, '') === 'rayodemagia';
 }
 
 /**
- * Escudos / retiros: marca anulada si una pasiva alRecibirProyectil protege al blanco.
+ * Escudos / retiros: anula proyectiles single-target cuyo blanco esta protegido.
+ * El rayo NO se anula entero aqui: se filtra hit a hit en rayoDeMagia.
  */
 export function aplicarCancelaciones(grupo, pila) {
   const tareas = grupo?.tareas ?? [];
-  const pasivas = pila?.listar?.() ?? [];
   tareas.forEach((tarea) => {
-    if (!esAtaqueProyectil(tarea)) return;
+    // Muerta en un grupo anterior: no actua en los siguientes.
+    // Dentro del mismo grupo todas resuelven contra la foto (regla 10).
+    if (Number(tarea?.potestad?.estadisticas?.hp ?? 0) <= 0 || tarea?.potestad?.muerta) {
+      tarea.anulada = true;
+      return;
+    }
+    const blanco = blancoDeTarea(tarea);
+    if (esAtaqueProyectil(tarea) && blanco?.pactoActivo) {
+      tarea.anulada = true;
+      return;
+    }
+    if (!esAtaqueProyectil(tarea) || esRayoDeMagia(tarea)) return;
     const idBlanco = idObjetivoTarea(tarea);
     if (idBlanco == null) return;
-    const protege = pasivas.some((p) => {
-      if (p.momento !== 'alRecibirProyectil') return false;
-      try {
-        return p.condicion({ objetivo: { id: idBlanco }, tarea }) === true;
-      } catch {
-        return false;
-      }
-    });
-    if (protege) tarea.anulada = true;
+    let anulado = false;
+    const disparadas = pila?.verificar?.('alRecibirProyectil', {
+      objetivo: blanco ?? { id: idBlanco },
+      tarea,
+      anular: () => { anulado = true; },
+      dano: 0,
+    }) ?? [];
+    if (anulado || disparadas.length > 0) tarea.anulada = true;
   });
   return {
     ...grupo,
@@ -236,6 +303,8 @@ function contextoDeTarea(tarea, entorno, extras = {}) {
     escena: entorno.escena,
     eventos: entorno.eventos,
     registro: entorno.registro,
+    pila: entorno.pila,
+    tamanoCasilla: entorno.tamanoCasilla ?? 400,
     ...extras,
   };
 }
@@ -253,8 +322,24 @@ function animsPasivasPorDisparos(disparadas, ctx) {
   return out;
 }
 
+function esPonerTrampa(tarea) {
+  return String(tarea?.accion?.nombre ?? tarea?.nombreDeAccion ?? '')
+    .trim()
+    .toLowerCase() === 'poner trampa';
+}
+
+function esTareaDeMovilidad(tarea) {
+  return esMovilidadNombre(tarea?.accion?.nombre ?? tarea?.nombreDeAccion);
+}
+
 /**
  * Resuelve activos del grupo. Apila pasivas nuevas. Verifica momentos.
+ * Orden dentro del grupo:
+ *   1) trampas (el suelo cambia)
+ *   2) movimientos simultaneos (salen / entran casillas)
+ *   3) resto (rayos, ataques… usan el tablero ya movido)
+ * Asi quien sale del rayo en el mismo tick no recibe el golpe, y quien
+ * pisa una trampa recien puesta si.
  * @returns resultado de grupo para show
  */
 export function resolverGrupo(grupo, foto, entorno) {
@@ -262,7 +347,16 @@ export function resolverGrupo(grupo, foto, entorno) {
   const animacionesPasivas = [];
   const resueltas = [];
 
-  tareasNoAnuladas(grupo.tareas).forEach((tarea) => {
+  const potestadesTablero = entorno.registro?.todos?.().map((e) => e.potestad) ?? [];
+  reconciliarPosicionesEnTablero(potestadesTablero, entorno.tablero);
+  resolverColisionesDeMovimiento(grupo.tareas, entorno.tablero);
+
+  const pendientes = tareasNoAnuladas(grupo.tareas);
+  const movimientos = pendientes.filter(esTareaDeMovilidad);
+  const trampas = pendientes.filter((t) => !esTareaDeMovilidad(t) && esPonerTrampa(t));
+  const resto = pendientes.filter((t) => !esTareaDeMovilidad(t) && !esPonerTrampa(t));
+
+  const procesarTarea = (tarea, { saltarEjecutar = false } = {}) => {
     const ctxBase = contextoDeTarea(tarea, entorno, { foto });
     let anuladoPorPasiva = false;
     const ctxDano = {
@@ -288,19 +382,29 @@ export function resolverGrupo(grupo, foto, entorno) {
         : NaN,
     );
 
-    const resultado = typeof tarea.ejecutar === 'function'
-      ? tarea.ejecutar(ctxBase)
-      : null;
+    if (!saltarEjecutar) {
+      const resultado = typeof tarea.ejecutar === 'function'
+        ? tarea.ejecutar(ctxBase)
+        : null;
 
-    if (resultado?.efectoPasivo) {
-      tarea.accionPasiva = resultado.efectoPasivo;
-      pila.apilar(resultado.efectoPasivo, tarea);
+      if (resultado?.efectoPasivo) {
+        tarea.accionPasiva = resultado.efectoPasivo;
+        pila.apilar(resultado.efectoPasivo, tarea);
+      }
     }
 
     const nombre = tarea.accion?.nombre ?? tarea.nombreDeAccion;
-    if (nombre === 'moverse') {
+    if (esMovilidadNombre(nombre)) {
       const disparadas = pila.verificar('alMoverseACasilla', ctxBase);
       animacionesPasivas.push(...animsPasivasPorDisparos(disparadas, ctxBase));
+      if (aplicarMarcaApuntarPorMovimiento(tarea, entorno.registro)) {
+        const anim = entradaAnimPasiva(tarea.potestad, claveAnimPasiva('dano'));
+        if (anim) animacionesPasivas.push(anim);
+      }
+    }
+    if (tarea.trampaPisada) {
+      const anim = entradaAnimPasiva(tarea.potestad, claveAnimPasiva('dano'));
+      if (anim) animacionesPasivas.push(anim);
     }
 
     const disparadasAccion = pila.verificar('alHacerAccion', ctxBase);
@@ -319,14 +423,32 @@ export function resolverGrupo(grupo, foto, entorno) {
         const anim = entradaAnimPasiva(tarea.objetivo, claveAnimPasiva('dano'));
         if (anim) animacionesPasivas.push(anim);
       } else if (Number.isFinite(hpAntes) && hpDespues > hpAntes) {
-        const anim = entradaAnimPasiva(tarea.objetivo, claveAnimPasiva('cura'));
+        const tipo = hpAntes <= 0 ? 'revivir' : 'cura';
+        if (hpAntes <= 0 && tarea.objetivo) {
+          tarea.objetivo.muerta = false;
+          tarea.objetivo._muerteAnimada = false;
+          tarea.objetivo.aplicarCuerpoVivo?.(entorno.escena);
+        }
+        const anim = entradaAnimPasiva(tarea.objetivo, claveAnimPasiva(tipo));
         if (anim) animacionesPasivas.push(anim);
       }
     }
 
     tarea.efecto = efectoDeTarea(tarea, foto);
     resueltas.push(tarea);
-  });
+  };
+
+  trampas.forEach((tarea) => procesarTarea(tarea));
+  aplicarMovimientosSimultaneos(movimientos, entorno.tablero);
+  reconciliarPosicionesEnTablero(potestadesTablero, entorno.tablero);
+  movimientos.forEach((tarea) => procesarTarea(tarea, { saltarEjecutar: true }));
+
+  // Escudos / setups antes que proyectiles del mismo tick; luego cancelar.
+  const restoSetup = resto.filter((t) => !esAtaqueProyectil(t));
+  const restoProyectiles = resto.filter((t) => esAtaqueProyectil(t));
+  restoSetup.forEach((tarea) => procesarTarea(tarea));
+  aplicarCancelaciones({ tareas: restoProyectiles }, pila);
+  restoProyectiles.filter((t) => !t.anulada).forEach((tarea) => procesarTarea(tarea));
 
   const animacionesActivas = resueltas
     .map((t) => entradaAnimActiva(t))
@@ -341,9 +463,15 @@ export function resolverGrupo(grupo, foto, entorno) {
 }
 
 export function detectarMuertes(potestades) {
-  return (potestades ?? []).filter(
-    (potestad) => Number(potestad?.estadisticas?.hp) <= 0,
-  );
+  return (potestades ?? []).filter((potestad) => {
+    const muertaAhora = Number(potestad?.estadisticas?.hp) <= 0;
+    if (!muertaAhora) return false;
+    if (potestad._muerteAnimada) return false;
+    potestad.muerta = true;
+    potestad._muerteAnimada = true;
+    ponerEfecto(potestad, 'muerto');
+    return true;
+  });
 }
 
 export function evaluarFinBatalla(aliadosVivos, enemigosVivos) {
@@ -415,5 +543,8 @@ export async function ejecutarTurno(tareasOMapa, contexto = {}) {
   }
 
   pila.limpiar();
+  (contexto.registro?.todos?.() ?? []).forEach(({ potestad }) => {
+    if (potestad) potestad.pactoActivo = false;
+  });
   return { fin, pila };
 }

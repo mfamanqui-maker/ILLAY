@@ -1,0 +1,607 @@
+{
+	"textures": [
+		{
+			"image": "partidaEncontrada-0",
+			"format": "RGBA8888",
+			"size": {
+				"w": 5120,
+				"h": 5760
+			},
+			"scale": 1,
+			"frames": [
+				{
+					"filename": "ezgif-frame-001",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-003",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 1280,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-004",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 2560,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-005",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 3840,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-006",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 0,
+						"y": 720,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-007",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 1280,
+						"y": 720,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-008",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 2560,
+						"y": 720,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-009",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 3840,
+						"y": 720,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-010",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 0,
+						"y": 1440,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-011",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 0,
+						"y": 2160,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-012",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 0,
+						"y": 2880,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-013",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 0,
+						"y": 3600,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-014",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 0,
+						"y": 4320,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-015",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 0,
+						"y": 5040,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-016",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 1280,
+						"y": 1440,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-017",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 2560,
+						"y": 1440,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-018",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 3840,
+						"y": 1440,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-019",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 1280,
+						"y": 2160,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-020",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 2560,
+						"y": 2160,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-021",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 3840,
+						"y": 2160,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-022",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 1280,
+						"y": 2880,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-023",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 1280,
+						"y": 3600,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-024",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 1280,
+						"y": 4320,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-025",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 1280,
+						"y": 5040,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-026",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 2560,
+						"y": 2880,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-027",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 3840,
+						"y": 2880,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-028",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 2560,
+						"y": 3600,
+						"w": 1280,
+						"h": 720
+					}
+				},
+				{
+					"filename": "ezgif-frame-029",
+					"rotated": false,
+					"trimmed": false,
+					"sourceSize": {
+						"w": 1280,
+						"h": 720
+					},
+					"spriteSourceSize": {
+						"x": 0,
+						"y": 0,
+						"w": 1280,
+						"h": 720
+					},
+					"frame": {
+						"x": 3840,
+						"y": 3600,
+						"w": 1280,
+						"h": 720
+					}
+				}
+			]
+		}
+	],
+	"meta": {
+		"app": "https://free-tex-packer.org",
+		"version": "0.6.7"
+	}
+}

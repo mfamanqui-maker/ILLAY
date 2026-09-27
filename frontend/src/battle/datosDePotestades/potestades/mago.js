@@ -8,7 +8,9 @@
  * primer turno. Las funciones de efecto todavia no se escriben.
  */
 
-const ICONOS = 'assets/images/battle/Iconos/accion';
+import { FRAME } from '../../iconosAtlas.js';
+import { ponerEfecto, quitarEfecto } from '../efectosEstado.js';
+import { COSTES_DE_ACCION, puedePagarCoste } from '../acciones/diana.js';
 
 const LADO = 360;
 const FOTOGRAMAS = 8;
@@ -147,14 +149,15 @@ export class Mago {
     const stats = this.estadisticas;
     this.listaDeAcciones = {
       habilidades: [
-        { nombre: 'curar', rango: Infinity, velocidad: 0, condicional: stats.curas > 0, ruta: `${ICONOS}/S_Holy03.png` , type: 'dianaAliado'},
-        { nombre: 'generar magia', velocidad: 50, condicional: true, ruta: `${ICONOS}/S_Magic05.png` , type: 'directo'},
-        { nombre: 'rayo de magia', velocidad: 0, condicional: stats.magia > 0, ruta: `${ICONOS}/S_Thunder03.png` , type: 'dianaEnemigo'},
-        { nombre: 'zombiosis', rango: Infinity, velocidad: 100, condicional: false, ruta: `${ICONOS}/S_Poison03.png` , type: 'dianaAliado'},
+        { nombre: 'curar', rango: Infinity, velocidad: 0, coste: COSTES_DE_ACCION.curar, condicional: puedePagarCoste(stats, COSTES_DE_ACCION.curar), frame: FRAME.curar, type: 'dianaAliado'},
+        { nombre: 'generar magia', velocidad: 50, condicional: true, frame: FRAME.generarMagia, type: 'directo'},
+        { nombre: 'rayo de magia', velocidad: 0, coste: COSTES_DE_ACCION['rayo de magia'], condicional: puedePagarCoste(stats, COSTES_DE_ACCION['rayo de magia']), frame: FRAME.rayoDeMagia, type: 'dianaCasilla', permiteCasillaOcupada: true},
+        { nombre: 'zombiosis', rango: Infinity, velocidad: 100, coste: COSTES_DE_ACCION.zombiosis, condicional: puedePagarCoste(stats, COSTES_DE_ACCION.zombiosis), frame: FRAME.zombiosis, type: 'dianaAliado'},
       ],
       objetos: [],
       movimiento: [
-        { nombre: 'moverse', rango: 1, velocidad: 100, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` , type: 'dianaCasilla'},
+        { nombre: 'movilidad rapida', rango: 1, velocidad: 100, condicional: true, frame: FRAME.moverseRápido, type: 'dianaCasilla'},
+        { nombre: 'movilidad lenta', rango: 1, velocidad: 0, condicional: true, frame: FRAME.moverseNormal, type: 'dianaCasilla'},
       ],
     };
     return this.listaDeAcciones;
@@ -162,6 +165,61 @@ export class Mago {
 
   _claveDeTextura() {
     return `circulo_${this.constructor.arquetipo.toLowerCase()}_${String(this.bando).toLowerCase()}`;
+  }
+
+  _claveDeTexturaMuerto() {
+    return `${this._claveDeTextura()}_muerto`;
+  }
+
+  _texturaMuerto(escena) {
+    if (!escena?.textures) return null;
+    const clave = this._claveDeTexturaMuerto();
+    if (escena.textures.exists(clave)) return clave;
+    const textura = escena.textures.createCanvas(clave, LADO, LADO);
+    if (!textura) return null;
+    const ctx = textura.getContext();
+    if (this.bando === 'Aliados') {
+      ctx.translate(LADO, 0);
+      ctx.scale(-1, 1);
+    }
+    const cx = LADO / 2;
+    const cy = LADO / 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, RADIO_BASE, 0, Math.PI * 2);
+    ctx.fillStyle = '#000000';
+    ctx.fill();
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#000000';
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 42px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this.constructor.arquetipo, cx, cy);
+    textura.refresh();
+    return clave;
+  }
+
+  aplicarCuerpoMuerto(escena) {
+    this.muerta = true;
+    ponerEfecto(this, 'muerto');
+    const clave = this._texturaMuerto(escena);
+    if (clave && this.sprite?.setTexture) this.sprite.setTexture(clave);
+    this.sprite?.clearTint?.();
+    this.sprite?.setVisible?.(true);
+    this.sprite?.setAlpha?.(1);
+    this.sprite?.setScale?.(1);
+  }
+
+  aplicarCuerpoVivo(escena) {
+    this.muerta = false;
+    this._muerteAnimada = false;
+    quitarEfecto(this, 'muerto');
+    const clave = this._claveDeTextura();
+    if (escena?.textures?.exists(clave) && this.sprite?.setTexture) this.sprite.setTexture(clave);
+    this.sprite?.clearTint?.();
+    this.sprite?.setVisible?.(true);
+    this.sprite?.setAlpha?.(1);
   }
 
   AnimacionEstatica(escena) {
@@ -230,23 +288,36 @@ export class Mago {
   _animRayo(contexto) {
     const escena = contexto?.escena;
     if (!this.sprite || !escena?.add) return Promise.resolve();
+    const t = contexto?.tamanoCasilla ?? 400;
+    const celdas = contexto?.tarea?.rayoCeldas ?? [];
+    const ultima = celdas[celdas.length - 1];
     const origen = { x: this.sprite.x, y: this.sprite.y };
-    const destino = contexto?.destino
-      ? puntoDe(contexto, this)
-      : bordeLejano(this.sprite, contexto?.tablero, contexto?.tamanoCasilla ?? 400);
-    const emisor = escena.add.particles(origen.x, origen.y, PARTICULA, {
-      speed: 0,
-      lifespan: 180,
-      frequency: 16,
-      tint: 0xc9a6ff,
-      scale: { start: 0.55, end: 0.1 },
+    const destino = ultima
+      ? { x: (Number(ultima.x) - 1) * t + t / 2, y: (Number(ultima.y) - 1) * t + t / 2 }
+      : contexto?.destino
+        ? puntoDe(contexto, this)
+        : bordeLejano(this.sprite, contexto?.tablero, t);
+    escena.cameras?.main?.shake?.(320, 0.014);
+    const haz = escena.add.graphics();
+    haz.setDepth(13);
+    haz.lineStyle(Math.max(14, t * 0.045), 0xff1a1a, 1);
+    haz.lineBetween(origen.x, origen.y, destino.x, destino.y);
+    haz.lineStyle(Math.max(6, t * 0.018), 0xfff1a8, 0.95);
+    haz.lineBetween(origen.x, origen.y, destino.x, destino.y);
+    explotar(escena, origen.x, origen.y, 0xff4d4d, 16, 280);
+    explotar(escena, destino.x, destino.y, 0xfff1a8, 22, 360);
+    (celdas ?? []).forEach((celda) => {
+      explotar(
+        escena,
+        (Number(celda.x) - 1) * t + t / 2,
+        (Number(celda.y) - 1) * t + t / 2,
+        0xff1a1a,
+        8,
+        220,
+      );
     });
-    emisor.setDepth(13);
-    return tweenPromise(escena, { targets: emisor, x: destino.x, y: destino.y, duration: 420, ease: 'Cubic.easeOut' })
-      .then(() => {
-        explotar(escena, destino.x, destino.y, 0x9b5fd0, 20, 400);
-        emisor.destroy();
-      });
+    return tweenPromise(escena, { targets: haz, alpha: 0, duration: 420, ease: 'Cubic.easeOut' })
+      .then(() => { haz.destroy(); });
   }
 
   _animGenerarMagia(contexto) {
@@ -279,12 +350,14 @@ export class Mago {
     const escena = contexto?.escena;
     const punto = puntoDe(contexto, this);
     explotar(escena, punto.x, punto.y, 0xe8d4ff, 26, 700);
-    const blanco = contexto?.objetivo?.sprite ?? this.sprite;
-    if (blanco) {
-      blanco.setVisible(true);
-      blanco.setAlpha(0);
+    const blanco = contexto?.objetivo ?? this;
+    blanco.aplicarCuerpoVivo?.(escena);
+    const sprite = blanco?.sprite ?? this.sprite;
+    if (sprite) {
+      sprite.setVisible(true);
+      sprite.setAlpha(0);
     }
-    return tweenPromise(escena, { targets: blanco, alpha: 1, scale: 1.15, yoyo: true, duration: 280 });
+    return tweenPromise(escena, { targets: sprite, alpha: 1, scale: 1.15, yoyo: true, duration: 280 });
   }
 
   _animRecibirDano(contexto) {
@@ -300,8 +373,8 @@ export class Mago {
     const escena = contexto?.escena;
     if (!this.sprite) return Promise.resolve();
     explotar(escena, this.sprite.x, this.sprite.y, this.constructor.color, 28, 600);
-    return tweenPromise(escena, { targets: this.sprite, alpha: 0, scale: 0.4, duration: 360 })
-      .then(() => { this.sprite?.setVisible(false); });
+    this.aplicarCuerpoMuerto(escena);
+    return tweenPromise(escena, { targets: this.sprite, scale: 1.08, yoyo: true, duration: 220 });
   }
 }
 

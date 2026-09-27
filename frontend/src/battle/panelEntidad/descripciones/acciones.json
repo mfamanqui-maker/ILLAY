@@ -3,12 +3,13 @@
     "ESCUDAR": "La potestad activa su escudo si algun enemigo realiza un ataque de tipo proyectil este sera anulado y se gastara un escudo de no ser el caso esta accion no hara nada. velocidad: 100",
     "ATACAR": "La potestad ataca a un enemigo dentro de su rango de accion. velocidad: 50",
     "RITUAL": "La potestad realiza un ritual y obtiene 1 punto de anticristo. velocidad: 0",
-    "PACTO": "La potestad obtiene un escudo pierde 1 punto de vida y un punto de anticristo pero todo el daño que reciba sera anulado. velocidad: 120",
-    "MALDICION": "La potestad maldice a un enemigo objetivo y le hace mucho daño. velocidad: 100",
+    "PACTO": "La potestad obtiene un escudo pierde 1 punto de vida y un punto de anticristo pero todo el dano que reciba sera anulado. velocidad: 120",
+    "MALDICION": "La potestad maldice a un enemigo objetivo y le hace mucho dano. velocidad: 100",
     "ESTUDIAR": "La potestad obtiene 1 punto de estudio. velocidad: 50",
-    "APUNTAR": "La potestad gasta un punto de estudio y apuntara a un enemigo objetivo si este realiza una accion cualquiera recivira daño. velocidad: 150",
-    "DISPARAR": "La potestad dispara una flecha a un enemigo objetivo perdera un punto de estudio y el enemigo recivira daño. velocidad: 50",
+    "APUNTAR": "Este turno solo elige un enemigo y gasta 1 de conocimiento. Al turno siguiente el intelectual obtiene caza. Si el blanco hace una accion cualquiera ese turno recibe 3 de dano. Caza se va al acabar ese turno. velocidad: 150",
+    "DISPARAR": "La potestad dispara una flecha a un enemigo objetivo perdera un punto de estudio y el enemigo recivira dano esta accion cuesta un punto de conocimiento. velocidad: 50",
     "GENERAR MAGIA": "La potestad genera 1 punto de magia. velocidad: 50",
-    "RAYO DE MAGIA": "La potestad dispara un rayo de magia a un enemigo objetivo perdera 3 puntos de magia y si el rayo impacto hara mucho daño. velocidad: 0",
-    "ZOMBIOSIS": "La potestad reanimara a un aliado objetivo y recuperara 2 puntos de vida. velocidad: 100"
+    "RAYO DE MAGIA": "La potestad elige una casilla y dispara un rayo rojo hasta el borde del tablero. Gasta 3 de magia. Toda entidad en la linea recibe dano esta accion cuesta 3 de magia y hace 4 puntos de dano a los que se crucen por esta trayectoria. velocidad: 0",
+    "ZOMBIOSIS": "La potestad reanimara a un aliado objetivo y recuperara 2 puntos de vida esta accion cuesta 2 puntos de magia y 2 curas. velocidad: 100",
+    "DESCANSAR": "La potestad no hace nada este turno y el proximo turno obtiene un punto de accionismo extra. velocidad: 50"
 }

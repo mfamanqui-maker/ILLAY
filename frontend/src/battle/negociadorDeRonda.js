@@ -21,10 +21,19 @@ export function espejarObjetivo(objetivo, columnas) {
   return { x: columnas + 1 - Number(objetivo.x), y: Number(objetivo.y) };
 }
 
+export function espejarAzar(azar, columnas) {
+  if (azar == null || typeof azar !== 'object') return azar;
+  const out = { ...azar };
+  if (azar.rebote) out.rebote = espejarObjetivo(azar.rebote, columnas);
+  if (azar.pretendido) out.pretendido = espejarObjetivo(azar.pretendido, columnas);
+  return out;
+}
+
 export function espejarConfig(filas, columnas) {
   return (Array.isArray(filas) ? filas : []).map((fila) => ({
     ...fila,
     objetivo: espejarObjetivo(fila.objetivo, columnas),
+    azar: espejarAzar(fila.azar, columnas),
   }));
 }
 
@@ -35,29 +44,43 @@ function buscarAccion(potestad, nombre) {
 }
 
 export function filasDeConfig(configDelTurno) {
-  return [...(configDelTurno?.values?.() ?? [])];
+  return [...(configDelTurno?.values?.() ?? [])]
+    .flatMap((v) => (Array.isArray(v) ? v : [v]))
+    .map(({ id, nombreDeAccion, objetivo, azar }) => ({
+      id, nombreDeAccion, objetivo, azar: azar ?? null,
+    }));
 }
 
-/** Una fila espera al rival si su type es configtype1 y aun no hay su config. */
-export function filaEsperaRival(fila, registro, configuracionRival) {
+/**
+ * Una fila configtype1 sin objetivo espera al rival:
+ *   - sin config del rival (null): siempre;
+ *   - con config: solo si hay que elegir (>1 amenazado). Con 0/1 ya esta
+ *     resuelta por la seleccion automatica, aunque sea con null.
+ */
+export function filaEsperaRival(fila, registro, configuracionRival, tablero = null) {
   const entrada = registro?.obtenerPorId?.(fila.id);
   const accion = buscarAccion(entrada?.potestad, fila.nombreDeAccion);
   if (!accion) return false;
+  const tipo = String(accion.type ?? accion.tipo ?? '').toLowerCase();
+  if (!tipo.includes('configtype1')) return false;
+  if (fila.objetivo != null) return false;
+  if (configuracionRival == null) return true;
   const seleccion = seleccionarObjetivos(accion, {
     potestades: registro?.todos?.() ?? [],
-    origen: entrada?.potestad?.datos?.posicion,
+    origen: entrada?.potestad?.posicionPlanificada ?? entrada?.potestad?.datos?.posicion,
     configuracionRival,
+    tablero,
   });
-  return seleccion.esperaRival === true;
+  return seleccion.tipo === 'entidad';
 }
 
-export function esConfigFinal(filas, registro, configuracionRival) {
-  return !filas.some((fila) => filaEsperaRival(fila, registro, configuracionRival));
+export function esConfigFinal(filas, registro, configuracionRival, tablero = null) {
+  return !filas.some((fila) => filaEsperaRival(fila, registro, configuracionRival, tablero));
 }
 
-export function idsQueEsperanRival(filas, registro, configuracionRival) {
+export function idsQueEsperanRival(filas, registro, configuracionRival, tablero = null) {
   return filas
-    .filter((fila) => filaEsperaRival(fila, registro, configuracionRival))
+    .filter((fila) => filaEsperaRival(fila, registro, configuracionRival, tablero))
     .map((fila) => fila.id);
 }
 
@@ -79,9 +102,10 @@ export async function negociar(configDelTurno, {
   registro,
   haySocket,
   configuracionRival = null,
+  tablero = null,
 }) {
   const propia = filasDeConfig(configDelTurno);
-  const final = esConfigFinal(propia, registro, configuracionRival);
+  const final = esConfigFinal(propia, registro, configuracionRival, tablero);
 
   if (!haySocket) {
     return { fase: 'precombate', propia, rival: [] };
@@ -112,7 +136,7 @@ export async function negociar(configDelTurno, {
       fase: 'seleccionando',
       propia,
       rival,
-      idsPendientes: idsQueEsperanRival(propia, registro, rival),
+      idsPendientes: idsQueEsperanRival(propia, registro, rival, tablero),
     };
   }
 }

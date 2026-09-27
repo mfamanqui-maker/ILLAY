@@ -9,10 +9,25 @@ import {
   marcarAccionismoGastado,
   reiniciarAccionismo,
   restaurarBrillosAccionismo,
+  aplicarAccionismoDelTurno,
+  cupoAccionismo,
+  esAccionDeMovilidad,
+  colocarFantasmaMovilidad,
+  quitarFantasmaMovilidad,
+  limpiarFantasmasMovilidad,
+  liberarAccionismo,
+  iniciarBrilloAccionismo,
+  seleccionarObjetivos,
 } from './datosDePotestades/utilidadesDeSeleccion.js';
-import { SistemaDeOrbes, precargarOrbes } from './sistemaDeOrbes/index.js';
+import {
+  SistemaDeOrbes,
+  precargarOrbes,
+  abrirSesionTipo1,
+  pintarPasoTipo1,
+  cerrarSeleccionTipo1,
+} from './sistemaDeOrbes/index.js';
 import { transporte } from './coneccion.js';
-import { negociar } from './negociadorDeRonda.js';
+import { negociar, esConfigFinal, filasDeConfig } from './negociadorDeRonda.js';
 import {
   anotarJugadaEnRegistro,
   crearRegistroVacio,
@@ -23,6 +38,13 @@ import {
 import { ejecutarTurno, loguearMapaGuion, agruparPorVelocidad } from './guionSincrono.js';
 import { reproducirGrupo } from './showAsincrono.js';
 import { crearPilaPasivas } from './pilaPasivas.js';
+import { avanzarCicloCaza } from './datosDePotestades/efectosEstado.js';
+import {
+  apilarAccion,
+  aplicarPermanentes,
+  conmutarPermanente,
+  quitarDeCola,
+} from './colaDeJugada.js';
 
 export const CLAVE_ESCENA_MUNDO = 'PhaserMaster';
 
@@ -33,6 +55,8 @@ const RUTAS_DE_INPUT = {
   potestadDoblePulsada: '_alAbrirPanel',
   panelCerrado: '_alCerrarPanel',
   accionElegida: '_alElegirAccion',
+  colaEliminar: '_alEliminarDeCola',
+  colaPermanente: '_alMarcarPermanente',
   confirmar: '_alConfirmarJugada',
   rendirse: '_alRendirse',
 };
@@ -59,10 +83,13 @@ export default class PhaserMaster extends Phaser.Scene {
     this.eventos = new Phaser.Events.EventEmitter();
     this.registroDeJugadas = crearRegistroVacio();
     this.configDelTurno = new Map();
+    this.permanentes = new Map();
     this.configPropia = null;
     this.configRival = null;
     this.idsPendientes = null;
     this._negociando = false;
+    this._reconfirmarPendiente = false;
+    this._sesionTipo1 = null;
     this._batallaCerrada = false;
     this.estadoRonda = 'seleccionando';
   }
@@ -127,7 +154,9 @@ export default class PhaserMaster extends Phaser.Scene {
   }
 
   _alSeleccionarPotestad({ entidad, col, fila }) {
+    if (this._sesionTipo1) return;
     if (this._inputsBloqueados() || this.orbesSistema?.bloqueandoClic || entidad.bando === 'Enemigos') return;
+    if (entidad.muerta || Number(entidad.estadisticas?.hp) <= 0) return;
     if (this.idsPendientes && !this.idsPendientes.includes(entidad.id)) return;
     this.orbesSistema?.onDeseleccionar();
     this.seleccion = { entidad, col, fila };
@@ -135,7 +164,7 @@ export default class PhaserMaster extends Phaser.Scene {
   }
 
   _alAbrirPanel({ entidad }) {
-    if (this._inputsBloqueados()) return;
+    if (this._sesionTipo1 || this._inputsBloqueados()) return;
     this.orbesSistema?.onDeseleccionar();
     const entrada = this.registro.obtenerPorId(entidad?.id);
     const datos = adaptarParaPanel(entidad, entrada?.bando, this.registro);
@@ -151,17 +180,78 @@ export default class PhaserMaster extends Phaser.Scene {
   }
 
   _alPulsarCasilla() {
+    if (this._sesionTipo1) return;
     if (this._inputsBloqueados() || this.orbesSistema?.bloqueandoClic) return;
+    if (this.orbesSistema?.cerrarHijasCola?.()) return;
     this._cerrarOrbes();
   }
 
-  /** Accionismo 1: elegir otra vez reemplaza. Cupo 0 rechaza. */
+  /** Accionismo 1: elegir otra vez reemplaza. Cupo extra apila otra accion. */
   _alElegirAccion({ id, nombreDeAccion, objetivo, azar }) {
     if (this._inputsBloqueados()) return;
     const entrada = this.registro?.obtenerPorId(id);
-    if (Number(entrada?.potestad?.constantes?.accionismo ?? 1) < 1) return;
-    this.configDelTurno.set(id, { id, nombreDeAccion, objetivo, azar: azar ?? null });
-    marcarAccionismoGastado(entrada?.potestad);
+    const cupo = cupoAccionismo(entrada?.potestad);
+
+    // Fase 2 escudar: parchear la fila pendiente, no apilar otra.
+    if (this.idsPendientes && this._parchearEscudarPendiente(id, nombreDeAccion, objetivo)) {
+      this._intentarCerrarFaseTipo1();
+      return;
+    }
+
+    if (cupo < 1) return;
+    const fila = { id, nombreDeAccion, objetivo, azar: azar ?? null };
+    const { lista, gastada } = apilarAccion(this.configDelTurno, this.permanentes, id, fila, cupo);
+    if (gastada) marcarAccionismoGastado(entrada?.potestad);
+    this._actualizarFantasmaMovilidad(entrada?.potestad, lista);
+    if (this.idsPendientes) this._intentarCerrarFaseTipo1();
+  }
+
+  /** Rellena objetivo de un escudar/configtype1 pendiente. */
+  _parchearEscudarPendiente(id, nombreDeAccion, objetivo) {
+    const lista = this.configDelTurno.get(id)
+      ?? this.configDelTurno.get(Number(id))
+      ?? this.configDelTurno.get(String(id));
+    if (!Array.isArray(lista)) return false;
+    const fila = lista.find((f) => (
+      f.nombreDeAccion === nombreDeAccion && f.objetivo == null
+    )) ?? lista.find((f) => f.objetivo == null);
+    if (!fila) return false;
+    const tipo = String(
+      Object.values(this.registro?.obtenerPorId(id)?.potestad?.listaDeAcciones ?? {})
+        .flat()
+        .find((a) => a?.nombre === fila.nombreDeAccion)
+        ?.type ?? '',
+    ).toLowerCase();
+    if (!tipo.includes('configtype1') && nombreDeAccion !== 'escudar') return false;
+    fila.objetivo = objetivo;
+    if (nombreDeAccion) fila.nombreDeAccion = nombreDeAccion;
+    return true;
+  }
+
+  _alEliminarDeCola({ id, indiceLista }) {
+    if (this._inputsBloqueados()) return;
+    const potestad = this.registro?.obtenerPorId(id)?.potestad;
+    quitarDeCola(this.configDelTurno, this.permanentes, id, indiceLista);
+    if (potestad) liberarAccionismo(potestad);
+    this._actualizarFantasmaMovilidad(potestad, this.configDelTurno.get(id));
+    iniciarBrilloAccionismo(potestad, this, 'Aliados');
+  }
+
+  _alMarcarPermanente({ id, indiceLista }) {
+    if (this._inputsBloqueados()) return;
+    const cupo = cupoAccionismo(this.registro?.obtenerPorId(id)?.potestad);
+    conmutarPermanente(this.permanentes, this.configDelTurno, id, indiceLista, cupo);
+  }
+
+  _actualizarFantasmaMovilidad(potestad, lista) {
+    const mov = [...(lista ?? [])].reverse().find((f) => esAccionDeMovilidad(f?.nombreDeAccion));
+    const dest = mov?.objetivo;
+    if (dest && Number.isFinite(Number(dest.x)) && Number.isFinite(Number(dest.y))) {
+      colocarFantasmaMovilidad(potestad, dest, this, this.administrador?.tileSize ?? 400);
+      return;
+    }
+    if (potestad?.id != null) quitarFantasmaMovilidad(potestad.id);
+    if (potestad) potestad.posicionPlanificada = null;
   }
 
   _alCerrarPanel() {}
@@ -172,16 +262,26 @@ export default class PhaserMaster extends Phaser.Scene {
     this._negociando = true;
     try {
       await this._aplicarResultadoRonda(await negociar(this.configDelTurno, this._ctxRonda()));
+    } catch (error) {
+      console.error('[PhaserMaster] negociar:', error);
+      this._cambiarFase('seleccionando');
     } finally {
       this._negociando = false;
+    }
+    if (this._reconfirmarPendiente) {
+      this._reconfirmarPendiente = false;
+      await this._alConfirmarJugada();
     }
   }
 
   _ctxRonda() {
     return {
-      transporte: this.transporte, columnas: this.configuracion?.configTablero?.columnas,
-      registro: this.registro, haySocket: this.transporte.estaConectado(),
+      transporte: this.transporte,
+      columnas: this.configuracion?.configTablero?.columnas,
+      registro: this.registro,
+      haySocket: this.transporte.estaConectado(),
       configuracionRival: this.configRival,
+      tablero: this.tablero,
     };
   }
 
@@ -195,6 +295,92 @@ export default class PhaserMaster extends Phaser.Scene {
       return this._ejecutarTurno();
     }
     this._cambiarFase('seleccionando');
+    if (resultado.fase === 'seleccionando') {
+      await this._continuarFaseTipo1();
+    }
+  }
+
+  _ctxSeleccionTipo1(entrada, accion) {
+    return {
+      potestades: this.registro?.todos?.() ?? [],
+      origen: entrada?.potestad?.datos?.posicion,
+      origenPotestad: entrada?.potestad,
+      configuracionRival: this.configRival,
+      tablero: this.tablero,
+    };
+  }
+
+  /**
+   * Tras recibir la config del rival: auto-rellena 0/1 amenazado,
+   * recorre uno a uno a quien debe elegir, envia el final y va al show.
+   */
+  async _continuarFaseTipo1() {
+    const pendientes = this.idsPendientes ?? [];
+    const cola = [];
+
+    pendientes.forEach((id) => {
+      const lista = this.configDelTurno.get(id);
+      if (!Array.isArray(lista)) return;
+      lista.forEach((fila) => {
+        if (fila.objetivo != null) return;
+        const entrada = this.registro?.obtenerPorId(id);
+        const accion = Object.values(entrada?.potestad?.listaDeAcciones ?? {})
+          .flat()
+          .find((a) => a?.nombre === fila.nombreDeAccion) ?? null;
+        if (!accion) return;
+        if (!String(accion.type ?? accion.tipo ?? '').toLowerCase().includes('configtype1')) return;
+        const sel = seleccionarObjetivos(accion, this._ctxSeleccionTipo1(entrada, accion));
+        if (sel.tipo === 'automatico') {
+          fila.objetivo = sel.objetivoAuto ?? null;
+          return;
+        }
+        if (sel.tipo === 'entidad') {
+          cola.push({ id, fila, accion, potestad: entrada?.potestad, candidatos: sel.candidatos });
+        }
+      });
+    });
+
+    if (cola.length > 0) {
+      this._cerrarOrbes();
+      this._sesionTipo1 = abrirSesionTipo1(this, {
+        configuracionRival: this.configRival,
+        potestades: this.registro?.todos?.() ?? [],
+        tablero: this.tablero,
+      });
+      try {
+        for (const paso of cola) {
+          this.seleccion = { entidad: paso.potestad };
+          const elegido = await pintarPasoTipo1(this._sesionTipo1, {
+            defensor: paso.potestad,
+            candidatos: paso.candidatos,
+          });
+          this._parchearEscudarPendiente(paso.id, paso.accion?.nombre, elegido);
+        }
+      } finally {
+        this._cerrarSesionTipo1();
+      }
+    }
+
+    await this._intentarCerrarFaseTipo1();
+  }
+
+  _cerrarSesionTipo1() {
+    if (!this._sesionTipo1) return;
+    cerrarSeleccionTipo1(this._sesionTipo1);
+    this._sesionTipo1 = null;
+  }
+
+  async _intentarCerrarFaseTipo1() {
+    const filas = filasDeConfig(this.configDelTurno);
+    if (!esConfigFinal(filas, this.registro, this.configRival, this.tablero)) return;
+    this.idsPendientes = null;
+    // Dentro de una negociacion en curso _alConfirmarJugada se descarta:
+    // se reconfirma al salir de ella.
+    if (this._negociando) {
+      this._reconfirmarPendiente = true;
+      return;
+    }
+    await this._alConfirmarJugada();
   }
 
   async _alRendirse() {
@@ -206,10 +392,18 @@ export default class PhaserMaster extends Phaser.Scene {
     }
   }
 
+  _inyectarPermanentes() {
+    aplicarPermanentes(this.configDelTurno, this.permanentes, this.registro, this.tablero);
+    this.configDelTurno.forEach((lista, id) => {
+      this._actualizarFantasmaMovilidad(this.registro.obtenerPorId(id)?.potestad, lista);
+    });
+  }
+
   _cambiarFase(estadoRonda) {
     this.estadoRonda = estadoRonda;
     if (estadoRonda === 'seleccionando' && this.registro) {
       reiniciarAccionismo(this.idsPendientes);
+      if (this.idsPendientes == null) this._inyectarPermanentes();
       restaurarBrillosAccionismo({ escena: this, potestades: this.registro.todos() });
     }
     this.eventos.emit('faseCambiada', estadoRonda);
@@ -220,12 +414,14 @@ export default class PhaserMaster extends Phaser.Scene {
   }
 
   _recibirConfiguracionRival(configuracion) {
-    this.configRival = configuracion ?? [];
+    // null = aun no sabemos que hara el rival; [] = no hace nada.
+    this.configRival = configuracion ?? null;
     if (this.orbesSistema) this.orbesSistema.configuracionRival = this.configRival;
   }
 
   /** Precombate: Index enriquece, guion resuelve, show anima. */
   async _ejecutarTurno() {
+    limpiarFantasmasMovilidad(this.registro?.todos?.() ?? []);
     this._cambiarFase('ejecutando');
     registrarNuevoTurno(this.registroDeJugadas, this.registro);
     this.eventos.emit('registroJugadasActualizado', this.registroDeJugadas);
@@ -235,7 +431,10 @@ export default class PhaserMaster extends Phaser.Scene {
     const { fin } = await ejecutarTurno(tareas, this._ctxGuion());
     this._limpiarTrasTurno();
     if (fin) await this._terminarBatalla(fin);
-    else this._cambiarFase('seleccionando');
+    else {
+      aplicarAccionismoDelTurno(this.registro.todos());
+      this._cambiarFase('seleccionando');
+    }
   }
 
   _ctxGuion() {
@@ -252,6 +451,8 @@ export default class PhaserMaster extends Phaser.Scene {
   }
 
   _limpiarTrasTurno() {
+    this._cerrarSesionTipo1();
+    avanzarCicloCaza(this.registro);
     this.configDelTurno = new Map();
     this.configPropia = null;
     this._recibirConfiguracionRival(null);
@@ -266,7 +467,11 @@ export default class PhaserMaster extends Phaser.Scene {
 
   async _terminarBatalla(resultadoLocal, yaVeredicto = false) {
     if (this._batallaCerrada) return;
+    this._cerrarSesionTipo1();
     this._batallaCerrada = true;
+    this._negociando = false;
+    this.estadoRonda = 'terminada';
+    this.eventos.emit('faseCambiada', 'terminada');
     const resultado = yaVeredicto
       ? resultadoLocal
       : (await cerrarPartida(this.transporte, resultadoLocal)).resultado;
@@ -285,6 +490,7 @@ export default class PhaserMaster extends Phaser.Scene {
   }
 
   shutdown() {
+    this._cerrarSesionTipo1();
     this._cerrarOrbes();
     this._desregistrarInputs();
     this.administrador?.destruir();

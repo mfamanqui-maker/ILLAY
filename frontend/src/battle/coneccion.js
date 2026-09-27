@@ -1,33 +1,8 @@
-/**
- * coneccion.js — Transporte WebSocket del battle system.
- *
- * SPECT: docs/spects/spect010.md
- *
- * QUE ES: la unica pieza que sabe hablar con el servidor. Vive dentro de
- * battle/ para que el sistema traiga su propia conexion y se pueda copiar a
- * otro proyecto de una pieza. characterSelectScene lo importa desde aqui
- * para el emparejamiento; PhaserMaster lo usa para el bucle de rondas.
- *
- * El socket es un singleton de modulo: emparejamiento y batalla son la
- * misma sesion. El negociador recibe el objeto `transporte`, no el socket:
- * sustituir el WebSocket por una IA local no deberia tocar nada mas.
- *
- * Invariantes:
- *   - Todo mensaje es { type, data }. Sin excepciones.
- *   - Los type son exactamente los de AGENTS.md.
- *   - esperar() siempre termina: resuelve, o rechaza por tiempo o parseo.
- *   - Un _Final propio no cierra la escucha del rival.
- *
- * ESTADO: primitivas, API de protocolo y buzon de entrada. El servidor
- * reenvia con los type de AGENTS.md y guarda Recibir hasta que el rival
- * entra en la ronda.
- */
+// Contexto: este es un archibo ayudante con la logica de la coneccion del servidor
 
 const TIEMPO_MAXIMO_POR_DEFECTO = 30000;
 
 let socket = null;
-/** Cola FIFO de sobres. Un solo oyente permanente; esperar() consume.
- *  Sin esto, un Recibir que llega antes del listener se pierde. */
 const buzon = [];
 const esperas = [];
 
@@ -45,23 +20,63 @@ function exigirSocketAbierto() {
     }
 }
 
+const URL_WS = 'ws://localhost:8080';
+const TIEMPO_MAXIMO_CONECCION = 2000;
+
+function esperarReloj(ms) {
+    return new Promise((resolve) => { setTimeout(resolve, ms); });
+}
+
+function soltarSocket() {
+    if (!socket) return;
+    socket.removeEventListener('message', alMensaje);
+    try { socket.close(); } catch { /* ya estaba muerto */ }
+    socket = null;
+}
+
 /*
     Abre el socket si no esta abierto. Quien ya lo tiene reusa el mismo.
+    Un close o error sin open es servidor apagado: el overlay no puede
+    quedarse en el loop de buscar.
 */
 export function coneccion() {
     if (socket?.readyState === WebSocket.OPEN) return Promise.resolve();
+    if (socket) soltarSocket();
     return new Promise((resolve, reject) => {
-        socket = new WebSocket('wss://chasing-uncharted-ambiance.ngrok-free.dev');
-        socket.addEventListener('message', alMensaje);
-        socket.addEventListener('open', () => {
+        let terminado = false;
+        let abrio = false;
+        const candidato = new WebSocket(URL_WS);
+
+        function fallar(error) {
+            if (terminado) return;
+            terminado = true;
+            clearTimeout(id);
+            candidato.removeEventListener('message', alMensaje);
+            try { candidato.close(); } catch { /* */ }
+            reject(error);
+        }
+
+        const id = setTimeout(() => {
+            fallar(new Error('Servidor apagado'));
+        }, TIEMPO_MAXIMO_CONECCION);
+
+        candidato.addEventListener('message', alMensaje);
+        candidato.addEventListener('open', () => {
+            if (terminado) {
+                try { candidato.close(); } catch { /* */ }
+                return;
+            }
+            terminado = true;
+            clearTimeout(id);
+            abrio = true;
+            socket = candidato;
             resolve();
         });
-        socket.addEventListener('close', () => {
-            console.error('Coneccion cerrada');
+        candidato.addEventListener('close', () => {
+            if (!abrio) fallar(new Error('Servidor apagado'));
         });
-        socket.addEventListener('error', (e) => {
-            console.error('Error de coneccion', e);
-            reject(e);
+        candidato.addEventListener('error', () => {
+            fallar(new Error('Servidor apagado'));
         });
     });
 }
@@ -153,6 +168,17 @@ export function esperar(tipo, tiempoMaximo = TIEMPO_MAXIMO_POR_DEFECTO) {
     });
 }
 
+export function cancelarEsperas(tipos) {
+    const lista = Array.isArray(tipos) ? tipos : [tipos];
+    for (let i = esperas.length - 1; i >= 0; i -= 1) {
+        const espera = esperas[i];
+        if (!espera.tipos.some((tipo) => lista.includes(tipo))) continue;
+        esperas.splice(i, 1);
+        espera.limpiar();
+        espera.reject(new Error('espera cancelada'));
+    }
+}
+
 /*
     Cierra si hay socket. Sin guarda, socket.close() revienta con TypeError.
 */
@@ -174,8 +200,10 @@ export function buscarPartida(equipo) {
 }
 
 export function esperarPartida() {
-    return esperar(['Partida_Encontrada', 'Partida_No_Encontrada']);
+    return esperar(['Partida_Encontrada', 'Partida_No_Encontrada'], 22000);
 }
+
+export { esperarReloj };
 
 export function enviarConfigAcciones(configuracion) {
     enviarMensaje(sobre('Enviar_Config_Acciones', configuracion));

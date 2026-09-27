@@ -1,3 +1,6 @@
 {
-    "CRISTIANISMO": "Esta entidad no puede realizar acciones efencivas hasta que llege a 7 puntos de anticristo."
+    "CRISTIANISMO": "Esta entidad no puede realizar acciones efencivas hasta que llege a 7 puntos de anticristo.",
+    "DOMINIO": "La entidad se trasformo en demonio al alcanzar 7 puntos de anticristo.",
+    "MUERTO": "Esta entidad no puede realizar acciones hasta que sea reanimada.",
+    "CAZA": "El intelectual caza a un enemigo. Si ese blanco se mueve este turno recibe 3 de dano. El efecto se va al acabar el turno."
 }

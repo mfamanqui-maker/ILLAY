@@ -9,12 +9,23 @@ import {
 
 const PADDING = 16;
 
-function textoObjetivo(idObjetivo) {
+function mapaArquetiposDelTurno(turno) {
+  const mapa = new Map();
+  [...(turno?.aliados ?? []), ...(turno?.enemigos ?? [])].forEach((p) => {
+    if (p.idPotestad == null) return;
+    const nombre = p.arquetipo ?? p.etiqueta ?? null;
+    if (nombre) mapa.set(String(p.idPotestad), String(nombre));
+  });
+  return mapa;
+}
+
+function textoObjetivo(idObjetivo, mapaArquetipos) {
   if (idObjetivo == null) return '';
   if (typeof idObjetivo === 'object' && Number.isFinite(Number(idObjetivo.x))) {
     return `casilla (${idObjetivo.x}, ${idObjetivo.y})`;
   }
-  return `id ${idObjetivo}`;
+  const clave = String(idObjetivo);
+  return mapaArquetipos?.get(clave) ?? clave;
 }
 
 function textoEfecto(efecto) {
@@ -32,16 +43,16 @@ function textoEfecto(efecto) {
   return partes.join(', ');
 }
 
-function textoAccion(accion) {
+function textoAccion(accion, mapaArquetipos) {
   if (typeof accion === 'string') return accion;
   const nombre = accion?.nombre ?? 'accion';
-  const dest = textoObjetivo(accion?.idObjetivo);
+  const dest = textoObjetivo(accion?.idObjetivo, mapaArquetipos);
   const efecto = textoEfecto(accion?.efecto);
   const cuerpo = [nombre, dest && `→ ${dest}`, efecto && `(${efecto})`].filter(Boolean).join(' ');
   return accion?.cancelada ? `(cancelada) ${cuerpo}` : cuerpo;
 }
 
-function bloquePotestad(scene, x, y, ancho, potestad, colorBando) {
+function bloquePotestad(scene, x, y, ancho, potestad, colorBando, mapaArquetipos) {
   const cont = scene.add.container(x, y);
   cont.setScrollFactor(0);
 
@@ -49,10 +60,11 @@ function bloquePotestad(scene, x, y, ancho, potestad, colorBando) {
   const hpMax = potestad.hpMax ?? potestad.estadisticas?.hpMax ?? hp;
   const acciones = potestad.acciones ?? [];
   const lineasAccion = acciones.length
-    ? acciones.map((a) => `· ${textoAccion(a)}`)
+    ? acciones.map((a) => `· ${textoAccion(a, mapaArquetipos)}`)
     : ['· (sin acciones)'];
 
-  const encabezado = `${potestad.etiqueta ?? 'Potestad'}  Nv.${potestad.nivel ?? '?'}  HP ${hp}/${hpMax}`;
+  const nombreVisible = potestad.arquetipo ?? potestad.etiqueta ?? 'Potestad';
+  const encabezado = `${nombreVisible}  Nv.${potestad.nivel ?? '?'}  HP ${hp}/${hpMax}`;
   const cuerpo = scene.add.text(PADDING, PADDING, [encabezado, ...lineasAccion].join('\n'), {
     fontFamily: 'Arial',
     fontSize: 16,
@@ -90,6 +102,7 @@ function opcionesLista(scene, x, y, ancho, alto, padre) {
 
 export function crearVistaDetalle(scene, padre, opciones) {
   const { ancho, alto, turno, onRegresar } = opciones;
+  const mapaArquetipos = mapaArquetiposDelTurno(turno);
   const raiz = scene.add.container(0, 0);
   raiz.setScrollFactor(0);
   padre.add(raiz);
@@ -141,7 +154,7 @@ export function crearVistaDetalle(scene, padre, opciones) {
 
   let yA = 0;
   (turno?.aliados ?? []).forEach((p) => {
-    const bloque = bloquePotestad(scene, 4, yA, colAncho - 16, p, 0x6fcf6a);
+    const bloque = bloquePotestad(scene, 4, yA, colAncho - 16, p, 0x6fcf6a, mapaArquetipos);
     listaAliados.agregar(bloque.contenedor);
     yA += bloque.alto;
   });
@@ -149,7 +162,7 @@ export function crearVistaDetalle(scene, padre, opciones) {
 
   let yE = 0;
   (turno?.enemigos ?? []).forEach((p) => {
-    const bloque = bloquePotestad(scene, 4, yE, colAncho - 16, p, 0xe07a5f);
+    const bloque = bloquePotestad(scene, 4, yE, colAncho - 16, p, 0xe07a5f, mapaArquetipos);
     listaEnemigos.agregar(bloque.contenedor);
     yE += bloque.alto;
   });

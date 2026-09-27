@@ -2,18 +2,6 @@ const { WebSocketServer, WebSocket } = require('ws');
 const PUERTO = Number(process.env.PORT) || 8080;
 const wss = new WebSocketServer({ port: PUERTO });
 
-/**
- * Servidor-relevo del battle system (spect 010).
- *
- * No arbitra: no valida acciones, no conoce reglas, no tira dados.
- * Un _Final describe la config de ese jugador, no el estado de la sala.
- *
- * Recibir no se dispara a ciegas: si el rival aun no mando esta ronda,
- * el sobre va al buzon de su asiento y sale en su primer envio.
- */
-
-/** Cabe dentro del TIEMPO_MAXIMO de esperarPartida (30s) para que
- *  Partida_No_Encontrada llegue antes de que el cliente se rinda solo. */
 const TIEMPO_MAXIMO_COLA = 20000;
 
 const rooms = new Map();
@@ -57,7 +45,13 @@ wss.on('connection', (ws) => {
 });
 
 function buscarPartida(ws, data) {
-    if (enCola(ws) || salaDe(ws)) return;
+    const i = cola.findIndex((c) => c.user === ws);
+    if (i !== -1) {
+        clearTimeout(cola[i].idTemporizador);
+        cola.splice(i, 1);
+    }
+    const salaVieja = salaDe(ws);
+    if (salaVieja) cerrarSala(salaVieja);
 
     const yo = { user: ws, data };
     if (cola.length === 0) {
@@ -81,13 +75,10 @@ function agotarCola(esperando) {
 }
 
 /**
- * Buzon por asiento. El rival no esta escuchando hasta que entra a
- * negociar (escucha y luego manda). Si reenviamos antes, el frame se
- * pierde. Si reenviamos siempre al mandar nosotros, el que ya escuchaba
- * recibe dos Recibir y el segundo envenena la ronda siguiente.
- *
- * Live al que ya mando esta ronda. Al que no: se guarda. Al primer
- * envio propio se vacia el buzon (catch-up de una vez).
+ * Siempre al cable. Quien ya nego (type1) esta en recibirConfigDelRival:
+ * si guardamos el Recibir en un buzon de sala, no hay segundo flush y
+ * se queda esperando para siempre. Quien aun no escucha lo recoge el
+ * buzon del cliente (coneccion.js), no este servidor.
  */
 function reenviarConfig(ws, configuracion, esFinal) {
     const room = salaDe(ws);
@@ -97,26 +88,14 @@ function reenviarConfig(ws, configuracion, esFinal) {
     const rival = rivalDe(room, ws);
     if (!yo || !rival) return;
 
-    const primerEnvio = room.configuraciones[yo.clave] == null;
     room.configuraciones[yo.clave] = configuracion;
     room.finalizado[yo.clave] = Boolean(esFinal);
 
-    const type = esFinal
-        ? 'Recibir_Config_Acciones_Final'
-        : 'Recibir_Config_Acciones';
-
-    if (room.configuraciones[rival.clave] != null) {
-        enviar(rival.user, type, configuracion);
-    } else {
-        room.buzon[rival.clave].push({ type, data: configuracion });
-    }
-
-    if (primerEnvio) {
-        for (const msg of room.buzon[yo.clave]) {
-            enviar(yo.user, msg.type, msg.data);
-        }
-        room.buzon[yo.clave] = [];
-    }
+    enviar(
+        rival.user,
+        esFinal ? 'Recibir_Config_Acciones_Final' : 'Recibir_Config_Acciones',
+        configuracion,
+    );
 
     if (room.finalizado.jugadorA && room.finalizado.jugadorB) {
         resetearRonda(room);
@@ -185,7 +164,6 @@ function crearSala(miembros) {
         ronda: 1,
         configuraciones: { jugadorA: null, jugadorB: null },
         finalizado: { jugadorA: false, jugadorB: false },
-        buzon: { jugadorA: [], jugadorB: [] },
         declaraciones: { jugadorA: null, jugadorB: null },
         status: 'open',
     };
@@ -193,12 +171,16 @@ function crearSala(miembros) {
 
 function avisarPartidaEncontrada(room) {
     const [a, b] = room.miembros;
-    a.data.equipo.Aliados.forEach(personaje => {
-        personaje.id = crypto.randomUUID();
-    });
-    b.data.equipo.Aliados.forEach(personaje => {
-        personaje.id = crypto.randomUUID();
-    });
+    try {
+        a.data?.equipo?.Aliados?.forEach((personaje) => {
+            personaje.id = crypto.randomUUID();
+        });
+        b.data?.equipo?.Aliados?.forEach((personaje) => {
+            personaje.id = crypto.randomUUID();
+        });
+    } catch (error) {
+        console.error('no se pudo etiquetar el equipo', error);
+    }
     enviar(a.user, 'Partida_Encontrada', { id: room.id, rival: b.data, aliados: a.data });
     enviar(b.user, 'Partida_Encontrada', { id: room.id, rival: a.data, aliados: b.data });
 }
@@ -207,7 +189,6 @@ function resetearRonda(room) {
     room.ronda += 1;
     room.configuraciones = { jugadorA: null, jugadorB: null };
     room.finalizado = { jugadorA: false, jugadorB: false };
-    room.buzon = { jugadorA: [], jugadorB: [] };
 }
 
 function cerrarSala(room) {

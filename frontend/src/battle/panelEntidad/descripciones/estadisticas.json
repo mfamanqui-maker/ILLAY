@@ -2,7 +2,7 @@
   "HP": "Puntos de vida de la potestad.",
   "ESCUDOS": "Cantidad de escudos de la potestad.",
   "CURAS": "Cantidad de curas de la potestad.",
-  "DAÑO": "Puntos de daño de la potestad.",
+  "DANO": "Puntos de dano de la potestad.",
   "VELOCIDAD": "Velocidad de la potestad. (Mayor velocidad actua antes.)",
   "RANGO": "Rango de la potestad.",
   "ACCIONISMO": "Cantidad de acciones que puede realizar la potestad por turno.",
@@ -10,5 +10,5 @@
   "HPMAX": "Puntos de vida maximos de la potestad.",
   "ANTICRISTO": "Cuanto le falta a la potestad para ser transformada en un demonio.",
   "MAGIA": "Cantidad de magia de la potestad.",
-  "ESTUDIOS": "Cantidad de estudios de la potestad."
+  "CONOCIMIENTO": "Cantidad de conocimiento de la potestad."
 }

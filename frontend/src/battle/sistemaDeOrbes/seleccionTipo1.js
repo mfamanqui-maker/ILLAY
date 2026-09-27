@@ -21,6 +21,8 @@
  * el spect 005.
  */
 
+import { amenazasPorAliado } from '../datosDePotestades/utilidadesDeSeleccion.js';
+
 // ─── RESCATE: controladorJugada.js lineas 288-304. Adaptado. ─────────────────
 // Congelar las animaciones mientras el jugador decide. Devuelve la funcion que
 // las reanuda, para no tener que llevar la lista por fuera.
@@ -116,20 +118,294 @@ export function resumirAmenazas(acccionesPendientes) {
   return resumen;
 }
 
-// ─── A CONSTRUIR ─────────────────────────────────────────────────────────────
-//
-// mostrarSeleccionTipo1(escena, opciones) -> Promise<candidato|null>
-//
-// El original (controladorJugada.js lineas 449-555) montaba a mano el filtro
-// oscuro, los emisores de particulas, los cuatro handlers de puntero por
-// candidato y su limpieza. Se rescata la coreografia, pero hay dos cosas que
-// arreglar:
-//
-//   1. El filtro se reposicionaba escuchando 'update' de la escena y ese
-//      listener solo se quitaba en el camino feliz. Si la batalla terminaba
-//      durante la seleccion, quedaba colgado.
-//   2. La promesa no tenia salida: si el jugador no pulsaba nada, no se
-//      resolvia nunca. Hace falta poder cancelar con Escape.
-//
-// La fase de cancelacion de la regla 10 depende de esto: lo que devuelva esta
-// funcion decide que acciones se retiran del grupo antes de resolverlo.
+const COLOR_AZUL = 0x4da3ff;
+const COLOR_ROJO = 0xff4d4d;
+const DEPTH_FILTRO = 900;
+const DEPTH_ETIQUETA = 1001;
+
+function filasDeConfigRival(configuracionRival) {
+  if (Array.isArray(configuracionRival)) return configuracionRival;
+  if (Array.isArray(configuracionRival?.configuracion)) return configuracionRival.configuracion;
+  return [];
+}
+
+function entradaPorId(potestades, id) {
+  const clave = id == null ? null : String(id);
+  return (potestades ?? []).find((entrada) => (
+    String(entrada.potestad?.id) === clave
+    || String(entrada.potestad?.datos?.id) === clave
+  )) ?? null;
+}
+
+function textoObjetivo(objetivo, potestades) {
+  if (objetivo == null) return '';
+  if (typeof objetivo === 'object' && Number.isFinite(Number(objetivo.x))) {
+    return `(${Number(objetivo.x)}, ${Number(objetivo.y)})`;
+  }
+  const id = typeof objetivo === 'object' ? (objetivo.id ?? objetivo.potestadId) : objetivo;
+  const entrada = entradaPorId(potestades, id);
+  return entrada?.potestad?.arquetipo ?? String(id ?? '');
+}
+
+function estiloDeJugada(accion, nombre) {
+  const tipo = String(accion?.type ?? accion?.tipo ?? '').toLowerCase();
+  const n = String(nombre ?? accion?.nombre ?? '').toLowerCase();
+  const esAtaque = tipo.includes('enemigo')
+    || ['atacar', 'disparar', 'maldicion', 'rayo de magia'].includes(n);
+  const esCasilla = tipo.includes('casilla')
+    || n.includes('movilidad')
+    || n === 'moverse'
+    || n === 'poner trampa';
+  if (esAtaque) return { color: '#ff6b6b', backgroundColor: '#3a0000ee' };
+  if (esCasilla) return { color: '#8be66f', backgroundColor: '#0a2a00ee' };
+  return { color: '#f5d68a', backgroundColor: '#2a1e00ee' };
+}
+
+function buscarAccion(potestad, nombre) {
+  return Object.values(potestad?.listaDeAcciones ?? {})
+    .flat()
+    .find((accion) => accion?.nombre === nombre) ?? null;
+}
+
+function aplicarFiltroCamara(escena) {
+  const cam = escena?.cameras?.main;
+  if (!cam?.postFX?.addColorMatrix) return () => {};
+  let fx = null;
+  try {
+    fx = cam.postFX.addColorMatrix();
+    fx.grayscale?.(0.75);
+  } catch {
+    return () => {};
+  }
+  return () => {
+    try { cam.postFX?.remove?.(fx); } catch { /* ya destruida */ }
+  };
+}
+
+function crearOverlay(escena) {
+  const cam = escena.cameras.main;
+  const overlay = escena.add.rectangle(
+    cam.width / 2,
+    cam.height / 2,
+    cam.width,
+    cam.height,
+    0x1a1a1a,
+    0.48,
+  );
+  overlay.setScrollFactor(0);
+  overlay.setDepth(DEPTH_FILTRO);
+  overlay.setOrigin(0.5);
+  const sync = () => {
+    if (!overlay.active) return;
+    const c = escena.cameras.main;
+    overlay.setPosition(c.width / 2, c.height / 2);
+    overlay.setSize(c.width, c.height);
+    overlay.setDisplaySize(c.width, c.height);
+  };
+  escena.events.on('update', sync);
+  return {
+    nodo: overlay,
+    soltar: () => {
+      escena.events.off('update', sync);
+      overlay.destroy?.();
+    },
+  };
+}
+
+function crearEtiquetasRival(escena, configuracionRival, potestades) {
+  const nodos = [];
+  filasDeConfigRival(configuracionRival).forEach((fila) => {
+    const entrada = entradaPorId(potestades, fila.id);
+    if (entrada?.bando !== 'Enemigos') return;
+    const sprite = entrada.potestad?.sprite;
+    if (!sprite?.active) return;
+    const nombre = fila.nombreDeAccion ?? fila.nombre ?? '';
+    const accion = buscarAccion(entrada.potestad, nombre);
+    const dest = textoObjetivo(fila.objetivo, potestades);
+    const texto = dest ? `${nombre}\n${dest}` : String(nombre);
+    const estilo = estiloDeJugada(accion, nombre);
+    const alto = sprite.displayHeight ?? sprite.height ?? 0;
+    const etiqueta = escena.add.text(sprite.x, sprite.y - alto * 0.55, texto.toUpperCase(), {
+      fontFamily: 'Impact, Arial Black, Arial',
+      fontSize: '42px',
+      color: estilo.color,
+      backgroundColor: estilo.backgroundColor,
+      padding: { x: 16, y: 8 },
+      align: 'center',
+      stroke: '#000000',
+      strokeThickness: 4,
+    });
+    etiqueta.setOrigin(0.5, 1);
+    etiqueta.setDepth(DEPTH_ETIQUETA);
+    const sync = () => {
+      if (!etiqueta.active || !sprite.active) return;
+      const h = sprite.displayHeight ?? sprite.height ?? 0;
+      etiqueta.setPosition(sprite.x, sprite.y - h * 0.55);
+    };
+    escena.events.on('update', sync);
+    nodos.push({
+      nodo: etiqueta,
+      soltar: () => {
+        escena.events.off('update', sync);
+        etiqueta.destroy?.();
+      },
+    });
+  });
+  return nodos;
+}
+
+function limpiarAuras(sesion) {
+  (sesion.restaurarAuras ?? []).forEach((fn) => { try { fn?.(); } catch { /* sprite muerto */ } });
+  sesion.restaurarAuras = [];
+  (sesion.handlers ?? []).forEach(({ sprite, handler }) => {
+    sprite?.off?.('pointerdown', handler);
+  });
+  sesion.handlers = [];
+  (sesion.contadores ?? []).forEach((nodo) => nodo?.destroy?.());
+  sesion.contadores = [];
+}
+
+/**
+ * Monta filtro gris + etiquetas grandes. Se queda hasta cerrarSeleccionTipo1.
+ */
+export function abrirSesionTipo1(escena, { configuracionRival, potestades, tablero } = {}) {
+  if (!escena?.add) return null;
+  const overlay = crearOverlay(escena);
+  const etiquetas = crearEtiquetasRival(escena, configuracionRival, potestades);
+  const restaurarCamara = aplicarFiltroCamara(escena);
+  const sesion = {
+    escena,
+    overlay,
+    etiquetas,
+    restaurarCamara,
+    restaurarAuras: [],
+    handlers: [],
+    contadores: [],
+    configuracionRival,
+    potestades,
+    tablero,
+    keyHandler: null,
+    shutdownHandler: null,
+    cerrada: false,
+    _resolverPaso: null,
+  };
+  sesion.shutdownHandler = () => cerrarSeleccionTipo1(sesion);
+  escena.events.once('shutdown', sesion.shutdownHandler);
+  escena.events.once('destroy', sesion.shutdownHandler);
+  return sesion;
+}
+
+/**
+ * Aura azul en el defensor, parpadeo rojo en amenazados. Clic o Escape.
+ * @returns {Promise<string|number|null>}
+ */
+export function pintarPasoTipo1(sesion, { defensor, candidatos } = {}) {
+  if (!sesion || sesion.cerrada) return Promise.resolve(null);
+  const escena = sesion.escena;
+  limpiarAuras(sesion);
+
+  const azul = crearParpadeo(escena, defensor?.sprite, COLOR_AZUL);
+  if (azul) sesion.restaurarAuras.push(azul);
+
+  return new Promise((resolve) => {
+    let resuelto = false;
+    const terminar = (valor) => {
+      if (resuelto) return;
+      resuelto = true;
+      sesion._resolverPaso = null;
+      if (sesion.keyHandler && escena.input?.keyboard) {
+        escena.input.keyboard.off('keydown', sesion.keyHandler);
+      }
+      sesion.keyHandler = null;
+      limpiarAuras(sesion);
+      resolve(valor);
+    };
+    sesion._resolverPaso = terminar;
+
+    sesion.keyHandler = (event) => {
+      if (event.code !== 'Escape') return;
+      event.preventDefault?.();
+      terminar(null);
+    };
+    escena.input?.keyboard?.on('keydown', sesion.keyHandler);
+
+    const amenazas = amenazasPorAliado(
+      sesion.configuracionRival,
+      sesion.potestades,
+      sesion.tablero,
+    );
+
+    (candidatos ?? []).forEach((entrada) => {
+      const potestad = entrada.potestad ?? entrada;
+      const sprite = potestad?.sprite;
+      if (!sprite?.active) return;
+      if (String(potestad?.id) === String(defensor?.id)) return;
+      const rojo = crearParpadeo(escena, sprite, COLOR_ROJO);
+      if (rojo) sesion.restaurarAuras.push(rojo);
+      const cuenta = amenazas.get(String(potestad.id));
+      if (cuenta?.total > 0) {
+        const lineas = [`×${cuenta.total}`];
+        cuenta.porNombre.forEach((n, nombre) => {
+          lineas.push(n > 1 ? `${nombre} ×${n}` : nombre);
+        });
+        const alto = sprite.displayHeight ?? sprite.height ?? 0;
+        const badge = escena.add.text(sprite.x, sprite.y + alto * 0.52, lineas.join('\n'), {
+          fontFamily: 'Impact, Arial Black, Arial',
+          fontSize: '36px',
+          color: '#ff6b6b',
+          backgroundColor: '#3a0000ee',
+          padding: { x: 12, y: 6 },
+          align: 'center',
+          stroke: '#000000',
+          strokeThickness: 3,
+        });
+        badge.setOrigin(0.5, 0);
+        badge.setDepth(DEPTH_ETIQUETA);
+        sesion.contadores.push(badge);
+      }
+      sprite.setInteractive?.({ useHandCursor: true });
+      const handler = (pointer, _x, _y, event) => {
+        event?.stopPropagation?.();
+        terminar(potestad.id ?? null);
+      };
+      sprite.on('pointerdown', handler);
+      sesion.handlers.push({ sprite, handler });
+    });
+  });
+}
+
+export function cerrarSeleccionTipo1(sesion) {
+  if (!sesion || sesion.cerrada) return;
+  sesion.cerrada = true;
+  sesion._resolverPaso?.(null);
+  sesion._resolverPaso = null;
+  const escena = sesion.escena;
+  if (sesion.shutdownHandler && escena?.events) {
+    escena.events.off('shutdown', sesion.shutdownHandler);
+    escena.events.off('destroy', sesion.shutdownHandler);
+  }
+  sesion.shutdownHandler = null;
+  if (sesion.keyHandler && escena?.input?.keyboard) {
+    escena.input.keyboard.off('keydown', sesion.keyHandler);
+  }
+  sesion.keyHandler = null;
+  limpiarAuras(sesion);
+  sesion.etiquetas?.forEach((e) => e.soltar?.());
+  sesion.etiquetas = [];
+  sesion.overlay?.soltar?.();
+  sesion.overlay = null;
+  try { sesion.restaurarCamara?.(); } catch { /* camara ya muerta */ }
+  sesion.restaurarCamara = null;
+}
+
+/**
+ * Un paso suelto (abre, espera, cierra). La cola de PhaserMaster usa la sesion.
+ */
+export function mostrarSeleccionTipo1(escena, opciones = {}) {
+  const sesion = opciones.sesion
+    ?? abrirSesionTipo1(escena, opciones);
+  const propia = !opciones.sesion;
+  return pintarPasoTipo1(sesion, opciones).finally(() => {
+    if (propia && opciones.cerrar !== false) cerrarSeleccionTipo1(sesion);
+  });
+}

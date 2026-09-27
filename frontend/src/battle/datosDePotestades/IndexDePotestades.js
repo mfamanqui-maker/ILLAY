@@ -128,7 +128,12 @@ export function crearRegistro(equipos, escena = null) {
 
   return {
     porId,
-    obtenerPorId: (id) => porId.get(id),
+    obtenerPorId: (id) => {
+      if (id == null || id === '') return undefined;
+      return porId.get(id)
+        ?? porId.get(Number(id))
+        ?? porId.get(String(id));
+    },
     todos: () => [...porId.values()],
     porBando: (bando) => [...porId.values()].filter((e) => e.bando === bando),
   };
@@ -141,9 +146,11 @@ function copiarAccion(accion) {
     rango: accion.rango,
     velocidad: accion.velocidad,
     condicional: accion.condicional,
-    ruta: accion.ruta,
+    frame: accion.frame ?? null,
     type: accion.type ?? accion.tipo ?? null,
     casoDeEleccion: accion.casoDeEleccion ?? accion.casoDeElección ?? null,
+    permiteCasillaOcupada: accion.permiteCasillaOcupada === true,
+    coste: accion.coste && typeof accion.coste === 'object' ? { ...accion.coste } : null,
   };
 }
 
@@ -155,16 +162,41 @@ const TINTES = {
   objetos: 0xf5d36a,
 };
 
+function esEscalarDeFicha(nombre, valor) {
+  if (nombre === 'apuntando') return false;
+  return typeof valor === 'number' || typeof valor === 'boolean';
+}
+
+function hpVisible(valor) {
+  const n = Number(valor);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
 function filasDeMapa(mapa, tinte) {
-  return Object.entries(mapa ?? {}).map(([nombre, cantidad]) => ({ nombre, cantidad, tinte }));
+  return Object.entries(mapa ?? {})
+    .filter(([nombre, cantidad]) => esEscalarDeFicha(nombre, cantidad))
+    .map(([nombre, cantidad]) => ({ nombre, cantidad, tinte }));
 }
 
 function cantidadVisible(valor) {
+  if (valor && typeof valor === 'object') return cantidadVisible(valor.cantidad);
   if (valor === true || valor === false || valor == null || valor === '') return '';
   return valor;
 }
 
-/** Array `['cristianismo']` u objeto `{ cristianismo: true, veneno: 2 }`. */
+function extraIcono(valor) {
+  if (!valor || typeof valor !== 'object') return {};
+  const extra = {};
+  if (valor.frame != null) extra.frame = valor.frame;
+  if (valor.hoja != null) extra.hoja = valor.hoja;
+  return extra;
+}
+
+function efectoSeMuestra(valor) {
+  return valor !== false && valor != null;
+}
+
+/** Array `['cristianismo']` u objeto `{ cristianismo: { frame, hoja } }`. */
 function filasDeEfectos(efectos, tinte) {
   if (Array.isArray(efectos)) {
     return efectos.filter(Boolean).map((entrada) => {
@@ -173,14 +205,18 @@ function filasDeEfectos(efectos, tinte) {
         nombre: entrada.nombre,
         cantidad: cantidadVisible(entrada.cantidad),
         tinte,
+        ...extraIcono(entrada),
       };
     });
   }
-  return Object.entries(efectos ?? {}).map(([nombre, cantidad]) => ({
-    nombre,
-    cantidad: cantidadVisible(cantidad),
-    tinte,
-  }));
+  return Object.entries(efectos ?? {})
+    .filter(([, valor]) => efectoSeMuestra(valor))
+    .map(([nombre, valor]) => ({
+      nombre,
+      cantidad: cantidadVisible(valor),
+      tinte,
+      ...extraIcono(valor),
+    }));
 }
 
 function copiarEfectos(efectos) {
@@ -197,36 +233,33 @@ function idsPorBando(registro) {
 
 /**
  * Forma que espera abrirPanelEntidad. No importa el panel (regla 9).
- * Habilidades llevan `imagen`; el resto, solo `tinte` para la vela.
+ * Acciones llevan `frame` de la hoja; efectos, `frame` + `hoja` (1 o 2).
+ * Sin frame, el panel usa la vela tintada.
  */
 export function adaptarParaPanel(potestad, bando, registro) {
   const datos = datosDeEntidad(potestad);
   if (!datos) return null;
   const stats = datos.estadisticas ?? {};
   const constantes = datos.constantes ?? {};
+  const filaAccion = (accion, tinte) => ({
+    nombre: accion.nombre,
+    frame: accion.frame,
+    tinte: accion.frame == null ? tinte : undefined,
+  });
   return {
     nombre: datos.arquetipo ?? '',
     bando: bando ?? datos.bando ?? 'Aliados',
     idActual: datos.id,
     idInicial: datos.id,
     vida: {
-      vidaActual: stats.hp ?? 0,
-      vidaMaxima: datos.hpInicial ?? potestad.hpInicial ?? stats.hp ?? 1,
+      vidaActual: hpVisible(stats.hp),
+      vidaMaxima: Math.max(1, hpVisible(datos.hpInicial ?? potestad.hpInicial ?? stats.hp)),
     },
     estadisticas: [...filasDeMapa(stats, TINTES.estadisticas), ...filasDeMapa(constantes, TINTES.estadisticas)],
     efectos: filasDeEfectos(datos.efectos, TINTES.efectos),
-    acciones: (datos.listaDeAcciones.habilidades ?? []).map((accion) => ({
-      nombre: accion.nombre,
-      imagen: accion.ruta,
-    })),
-    objetos: (datos.listaDeAcciones.objetos ?? []).map((accion) => ({
-      nombre: accion.nombre,
-      tinte: TINTES.objetos,
-    })),
-    movimiento: (datos.listaDeAcciones.movimiento ?? []).map((accion) => ({
-      nombre: accion.nombre,
-      tinte: TINTES.movimiento,
-    })),
+    acciones: (datos.listaDeAcciones.habilidades ?? []).map((accion) => filaAccion(accion)),
+    objetos: (datos.listaDeAcciones.objetos ?? []).map((accion) => filaAccion(accion, TINTES.objetos)),
+    movimiento: (datos.listaDeAcciones.movimiento ?? []).map((accion) => filaAccion(accion, TINTES.movimiento)),
     equipos: idsPorBando(registro),
   };
 }
@@ -237,8 +270,10 @@ function copiarCadena(acciones) {
     rango: accion.rango,
     velocidad: accion.velocidad,
     condicional: accion.condicional,
-    ruta: accion.ruta,
+    frame: accion.frame ?? null,
     type: accion.type ?? accion.tipo ?? null,
+    permiteCasillaOcupada: accion.permiteCasillaOcupada === true,
+    coste: accion.coste && typeof accion.coste === 'object' ? { ...accion.coste } : null,
   }));
 }
 
@@ -288,10 +323,10 @@ const ARCHIVOS_DE_ACCIONES = [
     estudiar: AccionesDirecto.estudiar,
     ritual: AccionesDirecto.ritual,
     pacto: AccionesDirecto.pacto,
+    descansar: AccionesDirecto.descansar,
   } },
   { tipo: 'dianaEnemigo', fabricas: {
     atacar: AccionesDianaEnemigo.atacar,
-    rayoDeMagia: AccionesDianaEnemigo.rayoDeMagia,
     apuntar: AccionesDianaEnemigo.apuntar,
     disparar: AccionesDianaEnemigo.disparar,
     maldicion: AccionesDianaEnemigo.maldicion,
@@ -302,21 +337,47 @@ const ARCHIVOS_DE_ACCIONES = [
   } },
   { tipo: 'dianaCasilla', fabricas: {
     moverse: AccionesDianaCasilla.moverse,
+    movilidadRapida: AccionesDianaCasilla.moverse,
+    movilidadLenta: AccionesDianaCasilla.moverse,
     ponerTrampa: AccionesDianaCasilla.ponerTrampa,
+    rayoDeMagia: AccionesDianaCasilla.rayoDeMagia,
   } },
   { tipo: 'configtype1aliado', fabricas: {
     escudar: AccionesConfigType1Aliado.escudar,
   } },
 ];
 
-export const CATALOGO_DE_ACCIONES = Object.fromEntries(
-  ARCHIVOS_DE_ACCIONES.flatMap(({ tipo, fabricas }) =>
-    Object.entries(fabricas).map(([nombre, fabricar]) => [nombre, { nombre, tipo, fabricar }]),
-  ),
+function aliasEspaciado(nombre) {
+  return String(nombre ?? '')
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .toLowerCase();
+}
+
+const ENTRADAS_CATALOGO = ARCHIVOS_DE_ACCIONES.flatMap(({ tipo, fabricas }) =>
+  Object.entries(fabricas).map(([nombre, fabricar]) => [nombre, { nombre, tipo, fabricar }]),
 );
 
+export const CATALOGO_DE_ACCIONES = Object.fromEntries([
+  ...ENTRADAS_CATALOGO,
+  ...ENTRADAS_CATALOGO.flatMap(([nombre, entrada]) => {
+    const alias = aliasEspaciado(nombre);
+    return alias && alias !== nombre ? [[alias, entrada]] : [];
+  }),
+  ['descansa', { nombre: 'descansar', tipo: 'directo', fabricar: AccionesDirecto.descansar }],
+]);
+
+export function claveDeAccion(nombre) {
+  const crudo = String(nombre ?? '').trim();
+  if (!crudo) return '';
+  if (CATALOGO_DE_ACCIONES[crudo]) return CATALOGO_DE_ACCIONES[crudo].nombre;
+  const camel = crudo.replace(/[\s_]+(\S)/g, (_, c) => c.toUpperCase());
+  if (CATALOGO_DE_ACCIONES[camel]) return CATALOGO_DE_ACCIONES[camel].nombre;
+  return crudo;
+}
+
 export function resolverAccion(nombre) {
-  return CATALOGO_DE_ACCIONES[nombre] ?? null;
+  const clave = claveDeAccion(nombre);
+  return CATALOGO_DE_ACCIONES[clave] ?? CATALOGO_DE_ACCIONES[nombre] ?? null;
 }
 
 function buscarDeclarada(potestad, nombre) {
@@ -368,7 +429,12 @@ export function normalizarConfiguracion(configuracion, registro) {
         id: entrada.potestad.id,
         potestad: entrada.potestad,
         bando: entrada.bando,
-        accion: { ...declarada, ...enCatalogo },
+        accion: {
+          ...enCatalogo,
+          ...declarada,
+          tipo: enCatalogo.tipo,
+          fabricar: enCatalogo.fabricar,
+        },
         ...resolverObjetivoTarea(enCatalogo.tipo, fila?.objetivo, registro),
         azar: fila?.azar ?? null,
       };
@@ -378,11 +444,40 @@ export function normalizarConfiguracion(configuracion, registro) {
 
 const CLAVES_DE_ANIMACION = {
   moverse: 'movimiento',
+  movilidadRapida: 'movimiento',
+  movilidadLenta: 'movimiento',
+  'movilidad rapida': 'movimiento',
+  'movilidad lenta': 'movimiento',
   ponerTrampa: 'trampaEstatica',
+  'poner trampa': 'trampaEstatica',
+  generarMagia: 'generarMagia',
+  'generar magia': 'generarMagia',
+  rayoDeMagia: 'rayo',
+  'rayo de magia': 'rayo',
+  descansar: 'descansar',
+  descansa: 'descansar',
+  pacto: 'proteccion',
+  zombiosis: 'revivir',
 };
 
 function resolverAnimacion(potestad, nombre) {
-  const clave = CLAVES_DE_ANIMACION[nombre] ?? nombre;
+  const claveCanon = claveDeAccion(nombre);
+  if (claveCanon === 'ritual') {
+    return async (ctx) => {
+      await potestad.animaciones?.ritual?.(ctx);
+      if (potestad._transformarEsteShow) {
+        await potestad.animaciones?.transformacion?.(ctx);
+        potestad._transformarEsteShow = false;
+      }
+    };
+  }
+  if (potestad?.transformado && claveCanon === 'atacar') {
+    return potestad.animaciones?.atacarTransformado ?? potestad.animaciones?.atacar ?? null;
+  }
+  if (potestad?.transformado && claveCanon === 'maldicion') {
+    return potestad.animaciones?.maldecirTransformado ?? potestad.animaciones?.maldicion ?? null;
+  }
+  const clave = CLAVES_DE_ANIMACION[nombre] ?? CLAVES_DE_ANIMACION[claveCanon] ?? nombre ?? claveCanon;
   return potestad?.animaciones?.[clave] ?? null;
 }
 

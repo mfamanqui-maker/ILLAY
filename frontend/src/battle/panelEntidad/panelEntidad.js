@@ -30,6 +30,7 @@ import { crearLadoIzquierdo } from './partes/ladoIzquierdo.js';
 import { crearSeccionEstadisticasEfectos } from './partes/seccionEstadisticasEfectos.js';
 import { crearSeccionAcciones } from './partes/seccionAcciones.js';
 import { registrarInputsPanel } from './partes/inputs.js';
+import { precargarAtlasIconos } from '../iconosAtlas.js';
 
 export function precargarDescripcionesPanelEntidad(scene) {
   if (!scene?.load?.json) return;
@@ -59,6 +60,7 @@ export function precargarAssetsPanelEntidad(scene) {
   if (!scene.textures.exists(CLAVE_ICONO_FALLBACK)) {
     scene.load.image(CLAVE_ICONO_FALLBACK, ICONO_FALLBACK);
   }
+  precargarAtlasIconos(scene);
   precargarDescripcionesPanelEntidad(scene);
 }
 

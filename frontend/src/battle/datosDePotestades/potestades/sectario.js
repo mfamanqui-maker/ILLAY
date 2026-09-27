@@ -8,7 +8,9 @@
  * quien lo aplica es el guion, no esta clase.
  */
 
-const ICONOS = 'assets/images/battle/Iconos/accion';
+import { FRAME } from '../../iconosAtlas.js';
+import { ICONO_EFECTO, ponerEfecto, quitarEfecto } from '../efectosEstado.js';
+import { COSTES_DE_ACCION, puedePagarCoste } from '../acciones/diana.js';
 
 const LADO = 360;
 const FOTOGRAMAS = 8;
@@ -125,7 +127,7 @@ export class Sectario {
       arquetipo: 'cristianismo'
     };
     this.efectos = {
-      cristianismo: true,
+      cristianismo: { ...ICONO_EFECTO.cristianismo },
     };
     this.calcularAcciones();
     return this.estadisticas;
@@ -136,14 +138,15 @@ export class Sectario {
     const nivel = this.nivel;
     this.listaDeAcciones = {
       habilidades: [
-        { nombre: 'ritual', velocidad: 0, condicional: true, ruta: `${ICONOS}/S_Shadow05.png` , type: 'directo'},
-        { nombre: 'pacto', velocidad: 120, condicional: stats.anticristo > 0, ruta: `${ICONOS}/S_Shadow09.png` , type: 'directo'},
-        { nombre: 'atacar', rango: 5, velocidad: 50, condicional: stats.anticristo < 6, ruta: `${ICONOS}/S_Sword01.png` , type: 'dianaEnemigo'},
-        { nombre: 'maldicion', rango: Infinity, velocidad: 100, condicional: stats.anticristo > 6, ruta: `${ICONOS}/S_Shadow13.png` , type: 'dianaEnemigo'},
+        { nombre: 'ritual', velocidad: 0, condicional: true, frame: FRAME.ritual, type: 'directo'},
+        { nombre: 'pacto', velocidad: 120, coste: COSTES_DE_ACCION.pacto, condicional: puedePagarCoste(stats, COSTES_DE_ACCION.pacto), frame: FRAME.pacto, type: 'directo'},
+        { nombre: 'atacar', rango: 5, velocidad: 50, condicional: this.transformado || stats.anticristo >= 7, frame: FRAME.atacar, type: 'dianaEnemigo'},
+        { nombre: 'maldicion', rango: Infinity, velocidad: 100, coste: COSTES_DE_ACCION.maldicion, condicional: (this.transformado || stats.anticristo >= 7) && puedePagarCoste(stats, COSTES_DE_ACCION.maldicion), frame: FRAME.maldicion, type: 'dianaEnemigo'},
       ],
       objetos: [],
       movimiento: [
-        { nombre: 'moverse', rango: 1, velocidad: 100, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` , type: 'dianaCasilla'},
+        { nombre: 'movilidad rapida', rango: 1, velocidad: 100, condicional: true, frame: FRAME.moverseRápido, type: 'dianaCasilla'},
+        { nombre: 'movilidad lenta', rango: 1, velocidad: 0, condicional: true, frame: FRAME.moverseNormal, type: 'dianaCasilla'},
       ],
     };
     return this.listaDeAcciones;
@@ -151,6 +154,112 @@ export class Sectario {
 
   _claveDeTextura() {
     return `circulo_${this.constructor.arquetipo.toLowerCase()}_${String(this.bando).toLowerCase()}`;
+  }
+
+  _claveDeTexturaMuerto() {
+    return `${this._claveDeTextura()}_muerto`;
+  }
+
+  _texturaMuerto(escena) {
+    if (!escena?.textures) return null;
+    const clave = this._claveDeTexturaMuerto();
+    if (escena.textures.exists(clave)) return clave;
+    const textura = escena.textures.createCanvas(clave, LADO, LADO);
+    if (!textura) return null;
+    const ctx = textura.getContext();
+    if (this.bando === 'Aliados') {
+      ctx.translate(LADO, 0);
+      ctx.scale(-1, 1);
+    }
+    const cx = LADO / 2;
+    const cy = LADO / 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, RADIO_BASE, 0, Math.PI * 2);
+    ctx.fillStyle = '#000000';
+    ctx.fill();
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#000000';
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 42px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this.constructor.arquetipo, cx, cy);
+    textura.refresh();
+    return clave;
+  }
+
+  aplicarCuerpoMuerto(escena) {
+    this.muerta = true;
+    ponerEfecto(this, 'muerto');
+    this._emitterTransformado?.destroy?.();
+    this._emitterTransformado = null;
+    const clave = this._texturaMuerto(escena);
+    if (clave && this.sprite?.setTexture) this.sprite.setTexture(clave);
+    this.sprite?.clearTint?.();
+    this.sprite?.setVisible?.(true);
+    this.sprite?.setAlpha?.(1);
+    this.sprite?.setScale?.(1);
+  }
+
+  aplicarCuerpoVivo(escena) {
+    this.muerta = false;
+    this._muerteAnimada = false;
+    quitarEfecto(this, 'muerto');
+    const clave = this.transformado ? this._claveDeTexturaTransformado() : this._claveDeTextura();
+    if (escena?.textures?.exists(clave) && this.sprite?.setTexture) this.sprite.setTexture(clave);
+    this.sprite?.clearTint?.();
+    this.sprite?.setVisible?.(true);
+    this.sprite?.setAlpha?.(1);
+    if (this.transformado) this._iniciarParticulasTransformado(escena);
+  }
+
+  _claveDeTexturaTransformado() {
+    return `${this._claveDeTextura()}_transformado`;
+  }
+
+  _texturaTransformado(escena) {
+    if (!escena?.textures) return null;
+    const clave = this._claveDeTexturaTransformado();
+    if (escena.textures.exists(clave)) return clave;
+
+    const textura = escena.textures.createCanvas(clave, LADO, LADO);
+    if (!textura) return null;
+    const ctx = textura.getContext();
+    const cx = LADO / 2;
+    const cy = LADO / 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, RADIO_BASE, 0, Math.PI * 2);
+    ctx.fillStyle = '#000000';
+    ctx.fill();
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#000000';
+    ctx.stroke();
+    textura.refresh();
+    return clave;
+  }
+
+  _iniciarParticulasTransformado(escena) {
+    this._emitterTransformado?.destroy?.();
+    this._emitterTransformado = null;
+    if (!this.sprite || !escena?.add) return;
+    this._emitterTransformado = escena.add.particles(this.sprite.x, this.sprite.y, PARTICULA, {
+      speed: { min: 16, max: 48 },
+      lifespan: 720,
+      frequency: 55,
+      tint: 0xff1a1a,
+      scale: { start: 0.45, end: 0 },
+      follow: this.sprite,
+    });
+    this._emitterTransformado.setDepth(12);
+  }
+
+  aplicarCuerpoTransformado(escena) {
+    this.transformado = true;
+    const clave = this._texturaTransformado(escena);
+    if (clave && this.sprite?.setTexture) this.sprite.setTexture(clave);
+    this.sprite?.clearTint?.();
+    this._iniciarParticulasTransformado(escena);
   }
 
   AnimacionEstatica(escena) {
@@ -215,7 +324,10 @@ export class Sectario {
     const escena = contexto?.escena;
     const destino = puntoDe(contexto, this);
     if (!this.sprite || !escena) return Promise.resolve();
-    return tweenPromise(escena, { targets: this.sprite, x: destino.x, y: destino.y, duration: 260, ease: 'Sine.easeInOut' });
+    return tweenPromise(escena, { targets: this.sprite, x: destino.x, y: destino.y, duration: 260, ease: 'Sine.easeInOut' })
+      .then(() => {
+        this._emitterTransformado?.setPosition?.(this.sprite.x, this.sprite.y);
+      });
   }
 
   _animSerCurado(contexto) {
@@ -266,25 +378,24 @@ export class Sectario {
     const escena = contexto?.escena;
     if (!this.sprite) return Promise.resolve();
     explotar(escena, this.sprite.x, this.sprite.y, 0xff4d4d, 14, 300);
-    this.sprite.setTint(0xff4d4d);
+    if (!this.transformado) this.sprite.setTint(0xff4d4d);
     return tweenPromise(escena, { targets: this.sprite, x: this.sprite.x + 12, yoyo: true, duration: 70, repeat: 2 })
-      .then(() => { this.sprite?.clearTint(); });
+      .then(() => { if (!this.transformado) this.sprite?.clearTint(); });
   }
 
   _animMorir(contexto) {
     const escena = contexto?.escena;
     if (!this.sprite) return Promise.resolve();
     explotar(escena, this.sprite.x, this.sprite.y, this.constructor.color, 28, 600);
-    return tweenPromise(escena, { targets: this.sprite, alpha: 0, scale: 0.4, duration: 360 })
-      .then(() => { this.sprite?.setVisible(false); });
+    this.aplicarCuerpoMuerto(escena);
+    return tweenPromise(escena, { targets: this.sprite, scale: 1.08, yoyo: true, duration: 220 });
   }
 
   _animTransformacion(contexto) {
     const escena = contexto?.escena;
     if (!this.sprite) return Promise.resolve();
-    this.transformado = true;
-    explotar(escena, this.sprite.x, this.sprite.y, 0x5a0a12, 32, 700);
-    this.sprite.setTint(0x3b0d12);
+    explotar(escena, this.sprite.x, this.sprite.y, 0xff1a1a, 36, 700);
+    this.aplicarCuerpoTransformado(escena);
     return tweenPromise(escena, { targets: this.sprite, scale: 1.35, duration: 320, ease: 'Back.easeOut' });
   }
 

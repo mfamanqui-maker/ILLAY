@@ -51,6 +51,7 @@ export function armarEntornoEjecucion({
  */
 export function claveAnimPasiva(tipo) {
   if (tipo === 'cura') return 'serCurado';
+  if (tipo === 'revivir') return 'revivir';
   if (tipo === 'muerte') return 'morir';
   if (tipo === 'dano') return 'recibirDano';
   return null;

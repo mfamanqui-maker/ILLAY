@@ -39,9 +39,26 @@ export function iniciarBatalla(game, configuracion) {
   game.scene.start(CLAVE_ESCENA_MUNDO, configuracion);
 }
 
+/** Registra las dos escenas y lanza el mundo sin apagar la escena actual.
+ *  Phaser 3.90: launch vive en ScenePlugin (escena.scene), no en el SceneManager
+ *  (game.scene). Si se pasa el game, el overlay encontraba partida y reventaba. */
+export function lanzarBatallaEnFondo(escena, configuracion) {
+  if (!configuracion || typeof configuracion !== 'object') {
+    throw new Error('[vista] lanzarBatallaEnFondo necesita el molde ya resuelto, no una clave.');
+  }
+
+  const game = escena.game;
+  ESCENAS_DE_BATALLA.forEach(([clave, Escena]) => {
+    if (!game.scene.getScene(clave)) game.scene.add(clave, Escena, false);
+  });
+  escena.scene.launch(CLAVE_ESCENA_MUNDO, configuracion);
+}
+
 /**
  * Lanzador de prueba / modo historia. Resuelve Molde001 y arranca la batalla.
  */
+import { alterarMolde } from './AlmacenDeMoldes/TabuladorDeMoldes.js';
+
 export default class vista extends Phaser.Scene {
   constructor() {
     super({ key: 'vista' });
@@ -58,7 +75,12 @@ export default class vista extends Phaser.Scene {
     if (!this.configuracion?.nombre) {
       this.configuracion = this.cache.json.get('Molde001');
     }
-    iniciarBatalla(this.game, this.configuracion);
+    const listo = alterarMolde(this.configuracion, {
+      reubicarEnemigos: true,
+      casillas: { arquetipos: ['vacio'], cantidad: 2 },
+    });
+    iniciarBatalla(this.game, listo);
     console.log('this.configuracion', this.configuracion);
   }
 }
+

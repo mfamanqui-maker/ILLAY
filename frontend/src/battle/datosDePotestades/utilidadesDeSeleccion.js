@@ -14,6 +14,8 @@
  * Rescatado de: ui/Entidades/Aliados.js lineas 563-667 (borrado).
  */
 
+import { calcularRayoHastaBorde } from '../tablero/UtilsTablero.js';
+
 const COLOR_ESPERA = 0xfff2b0;
 const COLOR_ROJO = 0xff6b6b;
 const COLOR_CASILLA = 0xffe066;
@@ -24,8 +26,12 @@ const brillos = new Map();
 const overlaysCasilla = [];
 /** ids de potestades que ya confirmaron accion este turno. */
 const gastados = new Set();
+/** usos de accionismo por id, para cupos > 1. */
+const usosAccionismo = new Map();
 /** Etiquetas de Recibir_Config_Acciones bajo enemigos. */
 const etiquetasRival = [];
+/** id potestad → sprite fantasma de movilidad. */
+const fantasmasMovilidad = new Map();
 
 // ─── RESCATE: Aliados.js lineas 563-594. Sirve tal cual. ─────────────────────
 // Traduce el `casoDeElección` de una accion a que tipo de seleccion hace falta.
@@ -90,11 +96,45 @@ export function estaDentroDeRango(origen, destino, rango) {
 // El original leia las listas de vivos de la escena `entidad`. Ahora las
 // recibe: es lo que lo convierte en funcion pura.
 
-export function candidatosPorBando(potestades, bandos, origen, rango) {
+export function candidatosPorBando(potestades, bandos, origen, rango, opciones = {}) {
+  const soloMuertos = opciones.soloMuertos === true;
   return (potestades ?? [])
     .filter((entrada) => bandos.includes(entrada.bando))
-    .filter((entrada) => Number(entrada.potestad?.estadisticas?.hp) > 0)
+    .filter((entrada) => {
+      const p = entrada.potestad;
+      const hp = Number(p?.estadisticas?.hp ?? 0);
+      const muerta = p?.muerta === true || hp <= 0;
+      if (soloMuertos) return muerta;
+      return !muerta && hp > 0;
+    })
     .filter((entrada) => estaDentroDeRango(origen, entrada.potestad?.datos?.posicion, rango));
+}
+
+export function esAccionDeMovilidad(nombre) {
+  const n = String(nombre ?? '').trim().toLowerCase();
+  return n === 'moverse' || n === 'movilidad rapida' || n === 'movilidad lenta';
+}
+
+/**
+ * Origen para elegir otra movilidad. Si el cupo esta lleno, la siguiente
+ * eleccion remplazara la ultima fila: esa no cuenta como origen (si no, el
+ * fantasma alarga el rango sin limite).
+ */
+export function origenDeSeleccionMovilidad(potestad, configDelTurno) {
+  const raw = configDelTurno?.get?.(potestad?.id)
+    ?? configDelTurno?.get?.(Number(potestad?.id));
+  const filas = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  const cupo = cupoAccionismo(potestad);
+  const relevantes = filas.length >= cupo ? filas.slice(0, -1) : filas;
+  for (let i = relevantes.length - 1; i >= 0; i -= 1) {
+    const destino = relevantes[i]?.objetivo;
+    if (!esAccionDeMovilidad(relevantes[i]?.nombreDeAccion)) continue;
+    if (!destino || !Number.isFinite(Number(destino.x)) || !Number.isFinite(Number(destino.y))) {
+      continue;
+    }
+    return { x: Number(destino.x), y: Number(destino.y) };
+  }
+  return potestad?.datos?.posicion ?? null;
 }
 
 // ─── RESCATE ADAPTADO: Aliados.js lineas 645-666. ────────────────────────────
@@ -106,13 +146,32 @@ export function casillaEstaOcupada(casilla) {
   return Boolean(casilla?.entidad && casilla.entidad !== false);
 }
 
-export function candidatosCasilla(tablero, origen, rango, permitirOcupada = false) {
+function claveCasilla(x, y) {
+  return `${Number(x)},${Number(y)}`;
+}
+
+export function destinosMoverseAliados(configDelTurno, idExcluir = null) {
+  const reservadas = new Set();
+  const filas = [...(configDelTurno?.values?.() ?? [])].flatMap((v) => (Array.isArray(v) ? v : [v]));
+  filas.forEach((fila) => {
+    if (fila == null) return;
+    if (idExcluir != null && String(fila.id) === String(idExcluir)) return;
+    if (!esAccionDeMovilidad(fila.nombreDeAccion)) return;
+    const o = fila.objetivo;
+    if (!o || !Number.isFinite(Number(o.x)) || !Number.isFinite(Number(o.y))) return;
+    reservadas.add(claveCasilla(o.x, o.y));
+  });
+  return reservadas;
+}
+
+export function candidatosCasilla(tablero, origen, rango, permitirOcupada = false, clavesProhibidas = null) {
   const candidatos = [];
   (tablero ?? []).forEach((fila, y) => {
     fila.forEach((casilla, x) => {
       if (!casilla || casilla.id === 0) return;
       if (!permitirOcupada && casillaEstaOcupada(casilla)) return;
       const posicion = { x: x + 1, y: y + 1 };
+      if (clavesProhibidas?.has?.(claveCasilla(posicion.x, posicion.y))) return;
       if (!estaDentroDeRango(origen, posicion, rango)) return;
       candidatos.push({ casilla, ...posicion });
     });
@@ -122,10 +181,21 @@ export function candidatosCasilla(tablero, origen, rango, permitirOcupada = fals
 
 // ─── Brillo: iniciar / frenar ────────────────────────────────────────────────
 
+export function cupoAccionismo(potestad) {
+  return Number(potestad?.constantes?.accionismo ?? 1);
+}
+
+export function usosAccionismoDe(potestad) {
+  if (potestad?.id == null) return 0;
+  return usosAccionismo.get(potestad.id) ?? 0;
+}
+
 export function potestadTieneEspera(potestad) {
   if (!potestad) return false;
+  if (potestad.muerta || Number(potestad.estadisticas?.hp) <= 0) return false;
   if (potestad.id != null && gastados.has(potestad.id)) return false;
-  return Number(potestad.constantes?.accionismo ?? 1) > 0 && Boolean(potestad.sprite?.active);
+  if (usosAccionismoDe(potestad) >= cupoAccionismo(potestad)) return false;
+  return cupoAccionismo(potestad) > 0 && Boolean(potestad.sprite?.active);
 }
 
 export function iniciarBrillo(objetivo, opciones = {}) {
@@ -166,12 +236,9 @@ export function frenarBrillo(objetivo) {
   }
   if (objetivo.active === false) return;
   objetivo.setAlpha?.(estado.alphaPrevio ?? 1);
-  if (!objetivo.clearTint) return;
-  if (estado.tintePrevio != null && estado.tintePrevio !== 0xffffff) {
-    objetivo.setTint(estado.tintePrevio);
-  } else {
-    objetivo.clearTint();
-  }
+  // Siempre limpia el tinte de seleccion; no reaplicar tintePrevio (a veces
+  // ya era el rojo de una marca anterior y el sprite quedaba rojo).
+  objetivo.clearTint?.();
 }
 
 export function iniciarBrilloAccionismo(potestad, escena, bando) {
@@ -180,14 +247,80 @@ export function iniciarBrilloAccionismo(potestad, escena, bando) {
 }
 
 export function marcarAccionismoGastado(potestad) {
-  if (potestad?.id != null) gastados.add(potestad.id);
-  frenarBrillo(potestad?.sprite);
+  if (potestad?.id == null) return;
+  const usados = usosAccionismoDe(potestad) + 1;
+  usosAccionismo.set(potestad.id, usados);
+  if (usados >= cupoAccionismo(potestad)) {
+    gastados.add(potestad.id);
+    frenarBrillo(potestad?.sprite);
+  }
+}
+
+export function liberarAccionismo(potestad) {
+  if (potestad?.id == null) return;
+  const usados = Math.max(0, usosAccionismoDe(potestad) - 1);
+  if (usados === 0) usosAccionismo.delete(potestad.id);
+  else usosAccionismo.set(potestad.id, usados);
+  gastados.delete(potestad.id);
 }
 
 /** Sin ids: turno nuevo. Con ids: solo esas vuelven a esperar (ronda tipo 1). */
 export function reiniciarAccionismo(ids) {
-  if (ids == null) gastados.clear();
-  else ids.forEach((id) => gastados.delete(id));
+  if (ids == null) {
+    gastados.clear();
+    usosAccionismo.clear();
+    return;
+  }
+  ids.forEach((id) => {
+    gastados.delete(id);
+    usosAccionismo.delete(id);
+  });
+}
+
+export function colocarFantasmaMovilidad(potestad, destino, escena, tamanoCasilla = 400) {
+  if (!potestad || !destino || !escena?.add) return null;
+  quitarFantasmaMovilidad(potestad.id);
+  const src = potestad.sprite;
+  if (!src?.texture) return null;
+  const t = Number(tamanoCasilla) || 400;
+  const x = (Number(destino.x) - 1) * t + t / 2;
+  const y = (Number(destino.y) - 1) * t + t / 2 - 40;
+  const ghost = escena.add.sprite(x, y, src.texture.key, src.frame?.name ?? 0);
+  ghost.setOrigin(src.originX ?? 0.5, src.originY ?? 0.5);
+  ghost.setFlipX(Boolean(src.flipX));
+  ghost.setScale(src.scaleX ?? 1, src.scaleY ?? 1);
+  ghost.setAlpha(0.35);
+  ghost.setDepth((src.depth ?? 8) + 1);
+  ghost.disableInteractive?.();
+  fantasmasMovilidad.set(String(potestad.id), ghost);
+  potestad.posicionPlanificada = { x: Number(destino.x), y: Number(destino.y) };
+  return ghost;
+}
+
+export function quitarFantasmaMovilidad(id) {
+  if (id == null) return;
+  const ghost = fantasmasMovilidad.get(String(id));
+  ghost?.destroy?.();
+  fantasmasMovilidad.delete(String(id));
+}
+
+export function limpiarFantasmasMovilidad(potestades) {
+  fantasmasMovilidad.forEach((ghost) => ghost.destroy?.());
+  fantasmasMovilidad.clear();
+  (potestades ?? []).forEach((entrada) => {
+    const potestad = entrada?.potestad ?? entrada;
+    if (potestad) potestad.posicionPlanificada = null;
+  });
+}
+
+export function aplicarAccionismoDelTurno(potestades) {
+  (potestades ?? []).forEach((entrada) => {
+    const potestad = entrada?.potestad ?? entrada;
+    if (!potestad?.constantes) return;
+    const extra = Number(potestad.accionismoExtra ?? 0);
+    potestad.constantes.accionismo = 1 + extra;
+    potestad.accionismoExtra = 0;
+  });
 }
 
 export function iniciarBrilloCasilla(casilla, escena) {
@@ -259,7 +392,8 @@ export function aplicarMarcasSeleccion(resultado, contexto) {
   resultado.candidatos.forEach((entrada) => {
     const sprite = entrada.potestad?.sprite;
     if (!sprite?.active || sprite === lanzador) return;
-    iniciarBrillo(sprite, { escena: contexto.escena, color: 'rojo' });
+    // Diana de ataque: amarillo de espera. El rojo se reserva a amenazas tipo 1.
+    iniciarBrillo(sprite, { escena: contexto.escena });
   });
   if (resultado.etiquetasRival) {
     mostrarEtiquetasConfigRival(contexto.configuracionRival, contexto);
@@ -276,8 +410,10 @@ function filasDeConfigRival(configuracionRival) {
 }
 
 function entradaPorId(potestades, id) {
+  const clave = id == null ? null : String(id);
   return (potestades ?? []).find((entrada) => (
-    entrada.potestad?.id === id || entrada.potestad?.datos?.id === id
+    String(entrada.potestad?.id) === clave
+    || String(entrada.potestad?.datos?.id) === clave
   )) ?? null;
 }
 
@@ -349,27 +485,137 @@ export function mostrarEtiquetasConfigRival(configuracionRival, contexto) {
 
 function resultadoEntidad(bandos, contexto, accion) {
   const rango = obtenerRangoAccion(accion);
+  const soloMuertos = String(accion?.nombre ?? '').toLowerCase() === 'zombiosis';
   const resultado = {
     tipo: 'entidad',
     bandos,
-    candidatos: candidatosPorBando(contexto?.potestades, bandos, contexto?.origen, rango),
+    candidatos: candidatosPorBando(contexto?.potestades, bandos, contexto?.origen, rango, { soloMuertos }),
     esperaRival: false,
   };
   return aplicarMarcasSeleccion(resultado, contexto);
+}
+
+function idObjetivoRival(objetivo) {
+  if (objetivo == null) return null;
+  if (typeof objetivo === 'object') {
+    if (Number.isFinite(Number(objetivo.x))) return null;
+    return objetivo.id ?? objetivo.potestadId ?? null;
+  }
+  return objetivo;
+}
+
+function recolectarImpactosRival(configuracionRival, potestades, tablero = null) {
+  const impactos = [];
+  const nombresProyectil = new Set(['atacar', 'disparar', 'maldicion']);
+  filasDeConfigRival(configuracionRival).forEach((fila) => {
+    const entrada = entradaPorId(potestades, fila.id);
+    if (entrada && entrada.bando !== 'Enemigos') return;
+
+    const nombre = String(fila.nombreDeAccion ?? fila.nombre ?? '').trim();
+    const nombreNorm = nombre.toLowerCase();
+    const accion = entrada
+      ? buscarAccionPotestad(entrada.potestad, fila.nombreDeAccion ?? fila.nombre)
+      : null;
+    const tipo = String(accion?.type ?? accion?.tipo ?? '').toLowerCase();
+    const esProyectil = tipo.includes('enemigo') || nombresProyectil.has(nombreNorm);
+
+    if (esProyectil) {
+      const idBlanco = idObjetivoRival(fila.objetivo);
+      if (idBlanco == null) return;
+      const blanco = entradaPorId(potestades, idBlanco);
+      if (blanco && blanco.bando !== 'Aliados') return;
+      impactos.push({ idBlanco: String(idBlanco), nombre });
+      return;
+    }
+
+    if (nombreNorm !== 'rayo de magia' || !tablero) return;
+    const dest = fila.objetivo;
+    if (!dest || !Number.isFinite(Number(dest.x)) || !Number.isFinite(Number(dest.y))) return;
+    const origen = entrada?.potestad?.datos?.posicion;
+    if (!origen) return;
+    calcularRayoHastaBorde(origen, dest, tablero).forEach((celda) => {
+      const entidad = tablero[Number(celda.y) - 1]?.[Number(celda.x) - 1]?.entidad;
+      if (!entidad?.estadisticas) return;
+      const hallada = entradaPorId(potestades, entidad.id);
+      if (hallada?.bando !== 'Aliados') return;
+      impactos.push({ idBlanco: String(entidad.id), nombre });
+    });
+  });
+  return impactos;
+}
+
+/** Ids de aliados amenazados por ataques / rayo del rival (config ya en POV local). */
+export function idsAmenazadosPorRival(configuracionRival, potestades, tablero = null) {
+  return new Set(recolectarImpactosRival(configuracionRival, potestades, tablero).map((i) => i.idBlanco));
+}
+
+/** Por aliado: cuantos proyectiles le apuntan y de que accion. */
+export function amenazasPorAliado(configuracionRival, potestades, tablero = null) {
+  const mapa = new Map();
+  recolectarImpactosRival(configuracionRival, potestades, tablero).forEach(({ idBlanco, nombre }) => {
+    if (!mapa.has(idBlanco)) mapa.set(idBlanco, { total: 0, porNombre: new Map() });
+    const fila = mapa.get(idBlanco);
+    fila.total += 1;
+    const clave = nombre || 'proyectil';
+    fila.porNombre.set(clave, (fila.porNombre.get(clave) ?? 0) + 1);
+  });
+  return mapa;
 }
 
 function resultadoPosterior(bandos, contexto, accion) {
   if (contexto?.configuracionRival == null) {
     return { tipo: 'posterior', bandos, candidatos: [], esperaRival: true };
   }
+
+  const amenazados = idsAmenazadosPorRival(
+    contexto.configuracionRival,
+    contexto.potestades,
+    contexto.tablero,
+  );
+  const rango = obtenerRangoAccion(accion);
+  const enRango = candidatosPorBando(contexto?.potestades, bandos, contexto?.origen, rango);
+  const idDefensor = contexto?.origenPotestad?.id;
+  const candidatos = enRango.filter((entrada) => {
+    const id = String(entrada.potestad?.id);
+    if (!amenazados.has(id)) return false;
+    if (idDefensor != null && id === String(idDefensor)) return false;
+    return true;
+  });
+
+  // 0 amenazas: no hace nada. 1: auto. >1: el defensor elige.
+  if (candidatos.length === 0) {
+    return {
+      tipo: 'automatico',
+      bandos,
+      candidatos: [],
+      esperaRival: false,
+      objetivoAuto: null,
+    };
+  }
+  if (candidatos.length === 1) {
+    return {
+      tipo: 'automatico',
+      bandos,
+      candidatos,
+      esperaRival: false,
+      objetivoAuto: candidatos[0].potestad?.id ?? null,
+    };
+  }
+
   const resultado = {
-    ...resultadoEntidad(bandos, contexto, accion),
     tipo: 'entidad',
+    bandos,
+    candidatos,
     esperaRival: false,
     etiquetasRival: true,
   };
-  mostrarEtiquetasConfigRival(contexto.configuracionRival, contexto);
-  return resultado;
+  return mostrarJugadasEnemigasYElegirDefensa(resultado, contexto);
+}
+
+/** Si hay 2+ proyectiles: etiquetas de lo que hizo cada enemigo y diana de aliados. */
+export function mostrarJugadasEnemigasYElegirDefensa(resultado, contexto) {
+  if (!contexto) return resultado;
+  return aplicarMarcasSeleccion({ ...resultado, etiquetasRival: true }, contexto);
 }
 
 export function seleccionarDiana(accion, contexto) {
@@ -398,6 +644,9 @@ export function seleccionarConfigType1Enemigo(accion, contexto) {
 
 export function seleccionarCasilla(accion, contexto) {
   const rango = obtenerRangoAccion(accion);
+  const reservadas = esAccionDeMovilidad(accion?.nombre)
+    ? (contexto?.destinosAliados ?? destinosMoverseAliados(contexto?.configDelTurno, contexto?.origenPotestad?.id))
+    : null;
   const resultado = {
     tipo: 'casilla',
     bandos: [],
@@ -405,7 +654,10 @@ export function seleccionarCasilla(accion, contexto) {
       contexto?.tablero,
       contexto?.origen,
       rango,
-      accion?.permiteCasillaOcupada === true,
+      accion?.permiteCasillaOcupada === true
+        || esAccionDeMovilidad(accion?.nombre)
+        || String(accion?.nombre ?? '').toLowerCase() === 'rayo de magia',
+      reservadas,
     ),
     esperaRival: false,
   };

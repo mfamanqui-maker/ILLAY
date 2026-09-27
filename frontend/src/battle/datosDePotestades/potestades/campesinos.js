@@ -13,7 +13,10 @@
  * EL ARQUETIPO ES LA FAMILIA. characterSelectScene.js manda 'Campesino'.
  */
 
-const ICONOS = 'assets/images/battle/Iconos/accion';
+import { FRAME } from '../../iconosAtlas.js';
+import { ponerEfecto, quitarEfecto } from '../efectosEstado.js';
+import { COSTES_DE_ACCION, puedePagarCoste } from '../acciones/diana.js';
+import { colocarMarcaTrampa } from '../acciones/dianaCasilla.js';
 
 const LADO = 360;
 const FOTOGRAMAS = 8;
@@ -135,15 +138,17 @@ export class Campesino {
     const nivel = this.nivel;
     this.listaDeAcciones = {
       habilidades: [
-        { nombre: 'curar', rango: Infinity, velocidad: 0, condicional: stats.curas > 0, ruta: `${ICONOS}/S_Holy03.png` , type: 'dianaAliado'},
-        { nombre: 'escudar', rango: Infinity, velocidad: 100, condicional: stats.escudos > 0, ruta: `${ICONOS}/E_Wood03.png` , type: 'configtype1aliado'},
-        { nombre: 'atacar', rango: 1, velocidad: 50, condicional: true, ruta: `${ICONOS}/S_Sword01.png` , type: 'dianaEnemigo'},
+        { nombre: 'curar', rango: Infinity, velocidad: 0, coste: COSTES_DE_ACCION.curar, condicional: puedePagarCoste(stats, COSTES_DE_ACCION.curar), frame: FRAME.curar, type: 'dianaAliado'},
+        { nombre: 'escudar', rango: Infinity, velocidad: 100, coste: COSTES_DE_ACCION.escudar, condicional: puedePagarCoste(stats, COSTES_DE_ACCION.escudar), frame: FRAME.escudar, type: 'configtype1aliado'},
+        { nombre: 'atacar', rango: 1, velocidad: 50, condicional: true, frame: FRAME.atacar, type: 'dianaEnemigo'},
       ],
-      objetos: [
-        { nombre: 'poner trampa', rango: 2, velocidad: 50, condicional: true, ruta: `${ICONOS}/S_Earth03.png` , type: 'dianaCasilla'},
-      ],
+      objetos: [],
       movimiento: [
-        { nombre: 'moverse', rango: 2, velocidad: 100, condicional: true, ruta: `${ICONOS}/A_Shoes01.png` , type: 'dianaCasilla'},
+        { nombre: 'movilidad rapida', rango: 2, velocidad: 100, condicional: true, frame: FRAME.moverseRápido, type: 'dianaCasilla'},
+        { nombre: 'movilidad lenta', rango: 2, velocidad: 0, condicional: true, frame: FRAME.moverseNormal, type: 'dianaCasilla'},
+        { nombre: 'poner trampa', rango: 2, velocidad: 100, condicional: true, frame: FRAME.trampa, type: 'dianaCasilla'},
+        { nombre: 'descansar', rango: Infinity, velocidad: 50, condicional: true, frame: FRAME.descansar, type: 'directo'},
+        
       ],
     };
     return this.listaDeAcciones;
@@ -154,6 +159,61 @@ export class Campesino {
 
   _claveDeTextura() {
     return `circulo_${this.constructor.arquetipo.toLowerCase()}_${String(this.bando).toLowerCase()}`;
+  }
+
+  _claveDeTexturaMuerto() {
+    return `${this._claveDeTextura()}_muerto`;
+  }
+
+  _texturaMuerto(escena) {
+    if (!escena?.textures) return null;
+    const clave = this._claveDeTexturaMuerto();
+    if (escena.textures.exists(clave)) return clave;
+    const textura = escena.textures.createCanvas(clave, LADO, LADO);
+    if (!textura) return null;
+    const ctx = textura.getContext();
+    if (this.bando === 'Aliados') {
+      ctx.translate(LADO, 0);
+      ctx.scale(-1, 1);
+    }
+    const cx = LADO / 2;
+    const cy = LADO / 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, RADIO_BASE, 0, Math.PI * 2);
+    ctx.fillStyle = '#000000';
+    ctx.fill();
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#000000';
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 42px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this.constructor.arquetipo, cx, cy);
+    textura.refresh();
+    return clave;
+  }
+
+  aplicarCuerpoMuerto(escena) {
+    this.muerta = true;
+    ponerEfecto(this, 'muerto');
+    const clave = this._texturaMuerto(escena);
+    if (clave && this.sprite?.setTexture) this.sprite.setTexture(clave);
+    this.sprite?.clearTint?.();
+    this.sprite?.setVisible?.(true);
+    this.sprite?.setAlpha?.(1);
+    this.sprite?.setScale?.(1);
+  }
+
+  aplicarCuerpoVivo(escena) {
+    this.muerta = false;
+    this._muerteAnimada = false;
+    quitarEfecto(this, 'muerto');
+    const clave = this._claveDeTextura();
+    if (escena?.textures?.exists(clave) && this.sprite?.setTexture) this.sprite.setTexture(clave);
+    this.sprite?.clearTint?.();
+    this.sprite?.setVisible?.(true);
+    this.sprite?.setAlpha?.(1);
   }
 
   AnimacionEstatica(escena) {
@@ -209,6 +269,7 @@ export class Campesino {
       serCurado: (ctx) => this._animSerCurado(ctx),
       escudar: (ctx) => this._animEscudar(ctx),
       atacar: (ctx) => this._animAtacar(ctx),
+      descansar: (ctx) => this._animDescansar(ctx),
       recibirDano: (ctx) => this._animRecibirDano(ctx),
       morir: (ctx) => this._animMorir(ctx),
     };
@@ -224,18 +285,37 @@ export class Campesino {
 
   _animTrampaEstatica(contexto) {
     const escena = contexto?.escena;
-    const punto = puntoDe(contexto, this);
+    const destino = contexto?.destino
+      ?? (contexto?.objetivo?.x != null && !contexto.objetivo.estadisticas ? contexto.objetivo : null)
+      ?? contexto?.tarea?.objetivo;
+    const tablero = contexto?.tablero;
+    const casilla = tablero?.[Number(destino?.y) - 1]?.[Number(destino?.x) - 1];
+    // Si el resolve ya la consumio (pisada mismo tick), no recrear.
+    if (!casilla?.trampa || !destino) return Promise.resolve();
+    if (!casilla.trampa.marca) colocarMarcaTrampa(casilla, contexto, destino);
+    const marca = casilla.trampa.marca;
+    if (!marca || !escena?.tweens) return Promise.resolve();
+    marca.setScale(0.2);
+    return tweenPromise(escena, { targets: marca, scale: 1, duration: 220, ease: 'Back.easeOut' });
+  }
+
+  _animDescansar(contexto) {
+    const escena = contexto?.escena;
+    const origen = this.sprite ?? { x: 0, y: 0 };
     if (!escena?.add) return Promise.resolve();
-    this._trampaEmisor?.destroy();
-    this._trampaEmisor = escena.add.particles(punto.x, punto.y, PARTICULA, {
-      speed: { min: 8, max: 28 },
-      lifespan: 900,
-      frequency: 90,
-      tint: 0x6b4f2a,
-      scale: { start: 0.35, end: 0 },
+    const emisor = escena.add.particles(origen.x, origen.y, PARTICULA, {
+      speed: { min: 10, max: 36 },
+      lifespan: 640,
+      angle: { min: 250, max: 290 },
+      gravityY: -40,
+      tint: 0x9aa0a6,
+      scale: { start: 0.4, end: 0 },
+      emitting: false,
     });
-    this._trampaEmisor.setDepth(6);
-    return Promise.resolve();
+    emisor.setDepth(12);
+    emisor.explode(22);
+    escena.time.delayedCall(700, () => emisor.destroy());
+    return tweenPromise(escena, { targets: this.sprite, alpha: 0.75, yoyo: true, duration: 220 });
   }
 
   _animCurar(contexto) {
@@ -293,8 +373,8 @@ export class Campesino {
     const escena = contexto?.escena;
     if (!this.sprite) return Promise.resolve();
     explotar(escena, this.sprite.x, this.sprite.y, this.constructor.color, 28, 600);
-    return tweenPromise(escena, { targets: this.sprite, alpha: 0, scale: 0.4, duration: 360 })
-      .then(() => { this.sprite?.setVisible(false); });
+    this.aplicarCuerpoMuerto(escena);
+    return tweenPromise(escena, { targets: this.sprite, scale: 1.08, yoyo: true, duration: 220 });
   }
 }
 
