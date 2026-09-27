@@ -19,7 +19,7 @@
  * ya creado. No clona acciones ni cuelga el tablero de la potestad.
  */
 
-import { iniciarBrilloAccionismo } from '../datosDePotestades/utilidadesDeSeleccion.js';
+import { iniciarBrilloAccionismo } from '../seleccion/accionismo.js';
 
 // ─── RESCATE: phaserMoldFactory.js lineas 20-22 y 39-59. Sirve tal cual. ─────
 // Nota de vocabulario: aqui "molde" significaba la plantilla de un sprite.

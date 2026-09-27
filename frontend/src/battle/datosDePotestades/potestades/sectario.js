@@ -8,7 +8,7 @@
  * quien lo aplica es el guion, no esta clase.
  */
 
-import { FRAME } from '../../iconosAtlas.js';
+import { FRAME } from '../iconosAtlas.js';
 import { ICONO_EFECTO, ponerEfecto, quitarEfecto } from '../efectosEstado.js';
 import { COSTES_DE_ACCION, puedePagarCoste } from '../acciones/diana.js';
 
@@ -111,7 +111,7 @@ export class Sectario {
     const previas = this.estadisticas ?? {};
     const nivel = this.nivel;
     this.estadisticas = {
-      hp: 7,
+      hp: 5,
       anticristo: 0,
       velocidad: 2,
       dano: 3,

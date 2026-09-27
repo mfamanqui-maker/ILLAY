@@ -21,6 +21,7 @@ export class AccionesConfigType1Aliado {
       return {
         efectoPasivo: {
           momento: 'alRecibirProyectil',
+          protegido,
           condicion: (ctx) => String(ctx?.objetivo?.id) === idProtegido,
           aplicar: (ctx) => {
             if (ctx?.anular) ctx.anular();

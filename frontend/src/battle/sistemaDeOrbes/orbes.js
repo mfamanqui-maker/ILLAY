@@ -14,7 +14,7 @@ import {
   ICONO_FALLBACK,
 } from '../panelEntidad/panelEntidadConfig.js';
 import { adaptarParaOrbes } from '../datosDePotestades/IndexDePotestades.js';
-import { precargarAtlasIconos, resolverIcono } from '../iconosAtlas.js';
+import { precargarAtlasIconos, resolverIcono } from '../datosDePotestades/iconosAtlas.js';
 import {
   seleccionarObjetivos,
   aplicarMarcasSeleccion,
@@ -26,9 +26,9 @@ import {
   esAccionDeMovilidad,
   origenDeSeleccionMovilidad,
   casillaEstaOcupada,
-} from '../datosDePotestades/utilidadesDeSeleccion.js';
+} from '../seleccion/index.js';
 import { casillaLibreMasCercanaAlDestino } from '../tablero/UtilsTablero.js';
-import { filasDeCola } from '../colaDeJugada.js';
+import { filasDeCola } from '../AdministracionDeJugada/cola/colaDeJugada.js';
 
 /** Vela, Base.png y hoja de acciones: las orbes dibujan en el mundo, no en el HUD. */
 export function precargarOrbes(escena) {

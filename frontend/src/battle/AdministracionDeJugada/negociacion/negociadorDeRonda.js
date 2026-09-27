@@ -1,55 +1,18 @@
 /**
- * negociadorDeRonda.js — Bucle config1 -> configN -> precombate.
+ * negociacion/negociadorDeRonda.js — Bucle config1 -> configN -> precombate.
  *
  * SPECT: docs/spects/spect004.md y 010.
  *
  * PhaserMaster es dueno del estado; este archivo es el comportamiento de la
  * ronda. Recibe el Map de configDelTurno y un transporte inyectado: socket
  * o, mas adelante, una IA con la misma forma { id, nombreDeAccion, objetivo, azar }.
- *
- * Cada cliente piensa en SU tablero. Solo las coordenadas de casilla se
- * espejan al enviar: x' = columnas + 1 - x (POV del rival en el cable).
- * Al recibir, el payload ya viene en POV local (el rival espejo al mandar);
- * no se vuelve a espejar. Los ids / arquetipos no se tocan.
  */
 
-import { seleccionarObjetivos } from './datosDePotestades/utilidadesDeSeleccion.js';
+import { seleccionarObjetivos } from '../../seleccion/index.js';
+import { buscarAccion, filasDeConfig } from '../comun.js';
+import { espejarConfig } from './espejo.js';
 
-export function espejarObjetivo(objetivo, columnas) {
-  if (objetivo == null || typeof objetivo !== 'object') return objetivo;
-  if (!Number.isFinite(Number(objetivo.x)) || !Number.isFinite(columnas)) return objetivo;
-  return { x: columnas + 1 - Number(objetivo.x), y: Number(objetivo.y) };
-}
-
-export function espejarAzar(azar, columnas) {
-  if (azar == null || typeof azar !== 'object') return azar;
-  const out = { ...azar };
-  if (azar.rebote) out.rebote = espejarObjetivo(azar.rebote, columnas);
-  if (azar.pretendido) out.pretendido = espejarObjetivo(azar.pretendido, columnas);
-  return out;
-}
-
-export function espejarConfig(filas, columnas) {
-  return (Array.isArray(filas) ? filas : []).map((fila) => ({
-    ...fila,
-    objetivo: espejarObjetivo(fila.objetivo, columnas),
-    azar: espejarAzar(fila.azar, columnas),
-  }));
-}
-
-function buscarAccion(potestad, nombre) {
-  return Object.values(potestad?.listaDeAcciones ?? {})
-    .flat()
-    .find((accion) => accion?.nombre === nombre) ?? null;
-}
-
-export function filasDeConfig(configDelTurno) {
-  return [...(configDelTurno?.values?.() ?? [])]
-    .flatMap((v) => (Array.isArray(v) ? v : [v]))
-    .map(({ id, nombreDeAccion, objetivo, azar }) => ({
-      id, nombreDeAccion, objetivo, azar: azar ?? null,
-    }));
-}
+export { filasDeConfig };
 
 /**
  * Una fila configtype1 sin objetivo espera al rival:

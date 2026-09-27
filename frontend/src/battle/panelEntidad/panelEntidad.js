@@ -30,7 +30,7 @@ import { crearLadoIzquierdo } from './partes/ladoIzquierdo.js';
 import { crearSeccionEstadisticasEfectos } from './partes/seccionEstadisticasEfectos.js';
 import { crearSeccionAcciones } from './partes/seccionAcciones.js';
 import { registrarInputsPanel } from './partes/inputs.js';
-import { precargarAtlasIconos } from '../iconosAtlas.js';
+import { precargarAtlasIconos } from '../datosDePotestades/iconosAtlas.js';
 
 export function precargarDescripcionesPanelEntidad(scene) {
   if (!scene?.load?.json) return;

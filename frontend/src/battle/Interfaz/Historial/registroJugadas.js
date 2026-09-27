@@ -14,19 +14,14 @@ function mismaId(a, b) {
   return String(a) === String(b);
 }
 
-function etiquetaDe(datos, indiceEnBando) {
-  const arquetipo = datos?.arquetipo;
-  if (arquetipo) return String(arquetipo);
-  return `Potestad ${indiceEnBando + 1}`;
-}
-
-function instantaneaPotestad(potestad, indiceEnBando) {
+function instantaneaPotestad(potestad) {
   const datos = datosDeEntidad(potestad);
   const stats = datos?.estadisticas ?? {};
+  const arquetipo = datos?.arquetipo ? String(datos.arquetipo) : 'desconocido';
   return {
     idPotestad: datos?.id ?? null,
-    etiqueta: etiquetaDe(datos, indiceEnBando),
-    arquetipo: datos?.arquetipo ?? null,
+    arquetipo,
+    etiqueta: arquetipo,
     nivel: datos?.nivel ?? null,
     bando: datos?.bando ?? null,
     posicion: datos?.posicion ? { ...datos.posicion } : { x: null, y: null },
@@ -44,7 +39,7 @@ function construirInstantaneaTurno(numero, registroPotestades) {
   const enemigos = [];
   registroPotestades.todos().forEach(({ bando, potestad }) => {
     const lista = bando === 'Enemigos' ? enemigos : aliados;
-    lista.push(instantaneaPotestad(potestad, lista.length));
+    lista.push(instantaneaPotestad(potestad));
   });
   return {
     numero,
@@ -116,10 +111,25 @@ function aplicarEfectoEnInstantanea(potestadSnap, efecto) {
   });
 }
 
-function entradaAccion(jugada) {
+function arquetipoPorId(turno, id) {
+  if (id == null) return null;
+  const unidad = [...turno.aliados, ...turno.enemigos].find((p) => mismaId(p.idPotestad, id));
+  return unidad?.arquetipo ?? null;
+}
+
+/** Objetivo visible en UI: arquetipo o coordenadas de casilla, nunca id numerico. */
+function objetivoParaUi(turno, idObjetivo) {
+  if (idObjetivo == null) return null;
+  if (typeof idObjetivo === 'object' && Number.isFinite(Number(idObjetivo.x))) {
+    return { x: Number(idObjetivo.x), y: Number(idObjetivo.y) };
+  }
+  return arquetipoPorId(turno, idObjetivo) ?? null;
+}
+
+function entradaAccion(jugada, turno) {
   return {
     nombre: jugada.nombreAccion ?? jugada.nombreDeAccion ?? 'accion',
-    idObjetivo: jugada.idObjetivo ?? null,
+    objetivo: objetivoParaUi(turno, jugada.idObjetivo),
     cancelada: !!jugada.cancelada,
     efecto: jugada.efecto ?? null,
   };
@@ -134,11 +144,16 @@ export function anotarJugadaEnRegistro(registro, jugada) {
     grupo = { velocidad, jugadas: [] };
     turno.grupos.push(grupo);
   }
-  grupo.jugadas.push({ ...jugada });
+  const arquetipo = arquetipoPorId(turno, jugada.idPotestad);
+  grupo.jugadas.push({
+    ...jugada,
+    arquetipo: arquetipo ?? undefined,
+    objetivo: objetivoParaUi(turno, jugada.idObjetivo),
+  });
 
   const lista = jugada.bando === 'Enemigos' ? turno.enemigos : turno.aliados;
   const lanzador = lista.find((p) => mismaId(p.idPotestad, jugada.idPotestad));
-  if (lanzador) lanzador.acciones.push(entradaAccion(jugada));
+  if (lanzador) lanzador.acciones.push(entradaAccion(jugada, turno));
 
   const idAfectado = (jugada.idObjetivo != null && typeof jugada.idObjetivo !== 'object')
     ? jugada.idObjetivo

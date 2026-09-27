@@ -1,5 +1,5 @@
 /**
- * API publica del historial (spect 001).
+ * Punto de entrada del historial (spect 001).
  */
 
 export {

@@ -48,7 +48,7 @@ export class AccionesDianaEnemigo {
       const lanzador = lanzadorDe(contexto);
       const coste = costeDeAccion(contexto?.tarea?.accion, 'maldicion');
       if (!gastarFichas(lanzador, coste)) return;
-      const dano = cantidad ?? Number(lanzador.estadisticas.dano ?? 0) + 1;
+      const dano = cantidad ?? Number(lanzador.estadisticas.dano ?? 0) - 1;
       AccionesDiana.hacerDano(dano)(objetivo, contexto);
     };
   }

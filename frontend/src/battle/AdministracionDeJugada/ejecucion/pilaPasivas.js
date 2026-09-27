@@ -1,12 +1,20 @@
 /**
- * pilaPasivas.js — Efectos secundarios que esperan un momento y una condicion.
+ * ejecucion/pilaPasivas.js — Lista de pasivas: condiciones y efectos extra.
  *
  * SPECT: docs/spects/spect007.md (fase 2)
  *
- * Un activo puede devolver { efectoPasivo: { momento, condicion, aplicar } }.
+ * Una activa puede devolver { efectoPasivo: { momento, condicion, aplicar } }.
  * Se apila aqui; no se aplica hasta verificar(momento, ctx).
- * Al terminar la pila principal del turno se limpia.
+ * Al terminar el turno se limpia.
  */
+
+/** Momentos en los que el guion pregunta a la pila. */
+export const MOMENTOS = Object.freeze({
+  recibirProyectil: 'alRecibirProyectil',
+  recibirDano: 'alRecibirDano',
+  moverseACasilla: 'alMoverseACasilla',
+  hacerAccion: 'alHacerAccion',
+});
 
 /** @typedef {{ momento: string, condicion: Function, aplicar: Function, origen?: object }} EfectoPasivo */
 

@@ -11,7 +11,7 @@ import {
   ICONO_FALLBACK,
   CLAVE_ICONO_FALLBACK,
 } from '../panelEntidadConfig.js';
-import { resolverIcono } from '../../iconosAtlas.js';
+import { resolverIcono } from '../../datosDePotestades/iconosAtlas.js';
 
 function pintarVela(scene, container, item, x, y) {
   const clave = scene.textures.exists(CLAVE_ICONO_FALLBACK)

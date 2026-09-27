@@ -1,22 +1,7 @@
 /**
- * AdministradorTablero.js — Dueno de la data del tablero y de su dibujado.
- *
- * SPECT: docs/spects/spect003.md
- *
- * QUE ES: construye el array bidimensional a partir del molde, pinta las
+ * Contexto: este archivo construye el array bidimensional a partir del molde, pinta las
  * casillas, gestiona zoom, paneo, hover y clics, y avisa por eventos de lo que pasa
  * encima. Es la fuente unica de verdad de que hay en cada casilla.
- *
- * REGLA 1 DEL CONTRATO: esto NO es una escena. Es una clase normal que recibe
- * la escena del mundo (PhaserMaster) por constructor y dibuja en ella. El
- * codigo viejo era la escena `tablero`, y por eso el resto del sistema tenia
- * que buscarla por nombre. Con la escena inyectada ese acoplamiento desaparece.
- *
- * Sustituye a: scenes/battles/tableroScene.js y a la generacion del array de
- * classes/battle/tablero.js (ambos borrados).
- *
- * El comportamiento visual vive aqui para que PhaserMaster solo coordine su
- * montaje. Los listeners tambien pertenecen a esta clase y se retiran juntos.
  */
 
 const DOBLE_CLICK_MS = 320;

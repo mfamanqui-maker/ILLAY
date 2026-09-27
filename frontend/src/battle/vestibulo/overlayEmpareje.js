@@ -27,9 +27,9 @@ export default class OverlayEmpareje {
             'assets/images/battle/personajes/partidaEncontrada.json',
         );
         escena.load.atlas(
-            'transicionAtlas',
-            'assets/images/battle/personajes/Transición.png',
-            'assets/images/battle/personajes/Transición.json',
+            'transicionAtlas', 
+            'assets/images/battle/personajes/transicón.png', 
+            'assets/images/battle/personajes/transicón.json'
         );
     }
 

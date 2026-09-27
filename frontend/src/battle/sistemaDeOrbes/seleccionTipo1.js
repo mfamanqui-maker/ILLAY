@@ -21,7 +21,7 @@
  * el spect 005.
  */
 
-import { amenazasPorAliado } from '../datosDePotestades/utilidadesDeSeleccion.js';
+import { amenazasPorAliado } from '../seleccion/amenazas.js';
 
 // ─── RESCATE: controladorJugada.js lineas 288-304. Adaptado. ─────────────────
 // Congelar las animaciones mientras el jugador decide. Devuelve la funcion que

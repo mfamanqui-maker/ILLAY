@@ -25,11 +25,14 @@ import { POTESTADES_REALISTA } from './potestades/realista.js';
 import { POTESTADES_MAGO } from './potestades/mago.js';
 import { POTESTADES_INTELECTUAL } from './potestades/intelectual.js';
 import { POTESTADES_SECTARIO } from './potestades/sectario.js';
-import { AccionesDirecto } from './acciones/directo.js';
-import { AccionesDianaEnemigo } from './acciones/dianaEnemigo.js';
-import { AccionesDianaAliado } from './acciones/dianaAliado.js';
-import { AccionesDianaCasilla } from './acciones/dianaCasilla.js';
-import { AccionesConfigType1Aliado } from './acciones/configtype1aliado.js';
+import { claveDeAccion, resolverAccion } from './acciones/catalogo.js';
+
+export {
+  ARCHIVOS_DE_ACCIONES,
+  CATALOGO_DE_ACCIONES,
+  claveDeAccion,
+  resolverAccion,
+} from './acciones/catalogo.js';
 
 const TODAS_LAS_FAMILIAS = [
   ...POTESTADES_CAMPESINO,
@@ -315,71 +318,6 @@ export function datosDeEntidad(potestad) {
   };
 }
 
-// ─── Catalogo: el archivo es la etiqueta; atacar se escribe una vez ──────────
-
-const ARCHIVOS_DE_ACCIONES = [
-  { tipo: 'directo', fabricas: {
-    generarMagia: AccionesDirecto.generarMagia,
-    estudiar: AccionesDirecto.estudiar,
-    ritual: AccionesDirecto.ritual,
-    pacto: AccionesDirecto.pacto,
-    descansar: AccionesDirecto.descansar,
-  } },
-  { tipo: 'dianaEnemigo', fabricas: {
-    atacar: AccionesDianaEnemigo.atacar,
-    apuntar: AccionesDianaEnemigo.apuntar,
-    disparar: AccionesDianaEnemigo.disparar,
-    maldicion: AccionesDianaEnemigo.maldicion,
-  } },
-  { tipo: 'dianaAliado', fabricas: {
-    curar: AccionesDianaAliado.curar,
-    zombiosis: AccionesDianaAliado.zombiosis,
-  } },
-  { tipo: 'dianaCasilla', fabricas: {
-    moverse: AccionesDianaCasilla.moverse,
-    movilidadRapida: AccionesDianaCasilla.moverse,
-    movilidadLenta: AccionesDianaCasilla.moverse,
-    ponerTrampa: AccionesDianaCasilla.ponerTrampa,
-    rayoDeMagia: AccionesDianaCasilla.rayoDeMagia,
-  } },
-  { tipo: 'configtype1aliado', fabricas: {
-    escudar: AccionesConfigType1Aliado.escudar,
-  } },
-];
-
-function aliasEspaciado(nombre) {
-  return String(nombre ?? '')
-    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
-    .toLowerCase();
-}
-
-const ENTRADAS_CATALOGO = ARCHIVOS_DE_ACCIONES.flatMap(({ tipo, fabricas }) =>
-  Object.entries(fabricas).map(([nombre, fabricar]) => [nombre, { nombre, tipo, fabricar }]),
-);
-
-export const CATALOGO_DE_ACCIONES = Object.fromEntries([
-  ...ENTRADAS_CATALOGO,
-  ...ENTRADAS_CATALOGO.flatMap(([nombre, entrada]) => {
-    const alias = aliasEspaciado(nombre);
-    return alias && alias !== nombre ? [[alias, entrada]] : [];
-  }),
-  ['descansa', { nombre: 'descansar', tipo: 'directo', fabricar: AccionesDirecto.descansar }],
-]);
-
-export function claveDeAccion(nombre) {
-  const crudo = String(nombre ?? '').trim();
-  if (!crudo) return '';
-  if (CATALOGO_DE_ACCIONES[crudo]) return CATALOGO_DE_ACCIONES[crudo].nombre;
-  const camel = crudo.replace(/[\s_]+(\S)/g, (_, c) => c.toUpperCase());
-  if (CATALOGO_DE_ACCIONES[camel]) return CATALOGO_DE_ACCIONES[camel].nombre;
-  return crudo;
-}
-
-export function resolverAccion(nombre) {
-  const clave = claveDeAccion(nombre);
-  return CATALOGO_DE_ACCIONES[clave] ?? CATALOGO_DE_ACCIONES[nombre] ?? null;
-}
-
 function buscarDeclarada(potestad, nombre) {
   return Object.values(potestad?.listaDeAcciones ?? {})
     .flat()
@@ -433,6 +371,8 @@ export function normalizarConfiguracion(configuracion, registro) {
           ...enCatalogo,
           ...declarada,
           tipo: enCatalogo.tipo,
+          fase: enCatalogo.fase,
+          porGolpe: enCatalogo.porGolpe,
           fabricar: enCatalogo.fabricar,
         },
         ...resolverObjetivoTarea(enCatalogo.tipo, fila?.objetivo, registro),

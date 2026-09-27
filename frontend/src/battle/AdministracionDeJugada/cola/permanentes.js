@@ -1,9 +1,10 @@
 /**
- * colaDeJugada.js — Cola de acciones elegidas y permanentes.
+ * cola/permanentes.js — Acciones que se repiten cada turno.
  *
- * Ordena por velocidad, valida objetivos al reinyectar, y respeta el
- * cupo de accionismo al marcar permanentes. PhaserMaster solo llama
- * aqui al cambiar de fase y al borrar/marcar. Las orbes leen los Maps.
+ * SPECT: docs/spects/spect004.md
+ *
+ * Map id → copias `{ nombreDeAccion, objetivo, azar }`. Al abrir fase se
+ * reinyectan solo las que aun tienen objetivo valido y caben en el cupo.
  */
 
 import {
@@ -14,24 +15,8 @@ import {
   marcarAccionismoGastado,
   normalizarCasoSeleccion,
   obtenerRangoAccion,
-} from './datosDePotestades/utilidadesDeSeleccion.js';
-
-function listaDe(configDelTurno, id) {
-  const prev = configDelTurno?.get?.(id);
-  if (Array.isArray(prev)) return prev;
-  return prev ? [prev] : [];
-}
-
-function buscarAccion(potestad, nombre) {
-  return Object.values(potestad?.listaDeAcciones ?? {})
-    .flat()
-    .find((accion) => accion?.nombre === nombre) ?? null;
-}
-
-function entradaDe(registro, id) {
-  if (id == null || !registro?.obtenerPorId) return null;
-  return registro.obtenerPorId(id) ?? registro.obtenerPorId(Number(id)) ?? null;
-}
+} from '../../seleccion/index.js';
+import { buscarAccion, entradaDe, listaDe } from '../comun.js';
 
 export function copiaPersistente(fila) {
   return {
@@ -45,20 +30,6 @@ function mismaAccion(a, b) {
   return a?.nombreDeAccion === b?.nombreDeAccion
     && JSON.stringify(a?.objetivo ?? null) === JSON.stringify(b?.objetivo ?? null)
     && (a?.azar ?? null) === (b?.azar ?? null);
-}
-
-export function filasDeCola(configDelTurno, id, potestad) {
-  return listaDe(configDelTurno, id)
-    .map((fila, indiceLista) => {
-      const accion = buscarAccion(potestad, fila.nombreDeAccion);
-      return {
-        fila,
-        indiceLista,
-        accion,
-        velocidad: Number(accion?.velocidad ?? 0),
-      };
-    })
-    .sort((a, b) => b.velocidad - a.velocidad);
 }
 
 function idDeObjetivo(objetivo) {
@@ -107,32 +78,6 @@ export function quitarPermanentePorFila(permanentes, id, fila) {
   guardadas.splice(idx, 1);
   if (guardadas.length === 0) permanentes.delete(id);
   else permanentes.set(id, guardadas);
-}
-
-export function apilarAccion(configDelTurno, permanentes, id, fila, cupo) {
-  const lista = listaDe(configDelTurno, id);
-  let gastada = false;
-  if (lista.length >= cupo) {
-    const vieja = lista[lista.length - 1];
-    if (vieja?.permanente) quitarPermanentePorFila(permanentes, id, vieja);
-    lista[lista.length - 1] = fila;
-  } else {
-    lista.push(fila);
-    gastada = true;
-  }
-  configDelTurno.set(id, lista);
-  return { lista, gastada };
-}
-
-export function quitarDeCola(configDelTurno, permanentes, id, indiceLista) {
-  const lista = listaDe(configDelTurno, id);
-  const fila = lista[indiceLista];
-  if (!fila) return null;
-  lista.splice(indiceLista, 1);
-  if (lista.length === 0) configDelTurno.delete(id);
-  else configDelTurno.set(id, lista);
-  if (fila.permanente) quitarPermanentePorFila(permanentes, id, fila);
-  return fila;
 }
 
 export function conmutarPermanente(permanentes, configDelTurno, id, indiceLista, cupo) {

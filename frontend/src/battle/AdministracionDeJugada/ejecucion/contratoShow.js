@@ -1,26 +1,18 @@
 /**
- * utilsEjecucion.js — Puente entre guionSincrono y showAsincrono.
+ * ejecucion/contratoShow.js — Lo que el guion entrega al show por grupo.
  *
  * SPECT: docs/spects/spect007.md (fase 2)
  *
- * Forma del resultado de grupo que el guion entrega al show.
- * Ni guion ni show importan IndexDePotestades.
+ * Resultado de grupo: { tareas, animacionesActivas, animacionesPasivas, anuladas }.
+ * Marcas que el guion deja en cada tarea y el show lee:
+ *   colisionMovimiento + destinoPretendido   choque (ir, temblor, reubicar)
+ *   trampaPisada {x,y}                        mover y luego explotar la mina
+ *   intercambio { potestad, destino }         segundo sprite que se desplaza
+ *   bloqueadaPor potestad                     proyectil parado por un escudo
  */
 
-/** Resultado vacio de un grupo. */
-export function resultadoGrupoVacio() {
-  return {
-    tareas: [],
-    animacionesActivas: [],
-    animacionesPasivas: [],
-    anuladas: [],
-  };
-}
+import { animBloqueoEscudo, animEscudoSobre } from './secuenciasShow.js';
 
-/**
- * @param {object} parcial
- * @returns {{ tareas, animacionesActivas, animacionesPasivas, anuladas }}
- */
 export function armarResultadoGrupo({
   tareas = [],
   animacionesActivas = [],
@@ -34,20 +26,9 @@ export function tareasNoAnuladas(tareas) {
   return (tareas ?? []).filter((t) => !t?.anulada);
 }
 
-/** Contexto compartido para ejecutar activos y para reproducir anims. */
-export function armarEntornoEjecucion({
-  escena,
-  tablero,
-  eventos,
-  registro,
-  pila,
-} = {}) {
-  return { escena, tablero, eventos, registro, pila };
-}
-
 /**
  * Mapea un efecto resuelto a una clave de animacion pasiva del receptor.
- * @param {'dano'|'cura'|'muerte'|'otro'} tipo
+ * @param {'dano'|'cura'|'revivir'|'muerte'} tipo
  */
 export function claveAnimPasiva(tipo) {
   if (tipo === 'cura') return 'serCurado';
@@ -57,10 +38,7 @@ export function claveAnimPasiva(tipo) {
   return null;
 }
 
-/**
- * Entrada para show: reproducir una anim del lanzador (activa).
- * @param {object} tarea
- */
+/** Entrada para show: reproducir una anim del lanzador (activa). */
 export function entradaAnimActiva(tarea) {
   if (!tarea || tarea.anulada) return null;
   const anim = tarea.animacion ?? tarea.reproducir;
@@ -80,11 +58,7 @@ export function entradaAnimActiva(tarea) {
   };
 }
 
-/**
- * Entrada para show: anim pasiva sobre una potestad.
- * @param {object} potestad
- * @param {string} clave
- */
+/** Entrada para show: anim pasiva sobre una potestad. */
 export function entradaAnimPasiva(potestad, clave) {
   if (!potestad || !clave) return null;
   const fn = potestad.animaciones?.[clave];
@@ -94,6 +68,32 @@ export function entradaAnimPasiva(potestad, clave) {
     potestad,
     clave,
     reproducir: (ctx) => fn({ ...ctx, potestad }),
+  };
+}
+
+/** Entrada para show: aura sobre quien protege un escudo. */
+export function entradaAnimEscudo(protegido) {
+  if (!protegido) return null;
+  return {
+    tipo: 'pasiva',
+    potestad: protegido,
+    clave: 'escudado',
+    reproducir: (ctx) => animEscudoSobre(ctx, protegido),
+  };
+}
+
+/** Proyectil bloqueado: el lanzador ataca igual y el escudo lo para. */
+export function entradaAnimBloqueada(tarea) {
+  if (!tarea?.anulada || !tarea.bloqueadaPor) return null;
+  const ataque = entradaAnimActiva({ ...tarea, anulada: false });
+  return {
+    tipo: 'activa',
+    tarea,
+    potestad: tarea.potestad,
+    reproducir: async (ctx) => {
+      await ataque?.reproducir?.(ctx);
+      await animBloqueoEscudo(ctx, tarea.bloqueadaPor);
+    },
   };
 }
 
