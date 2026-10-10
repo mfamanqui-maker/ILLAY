@@ -130,7 +130,7 @@ export class Mago {
     this.estadisticas = {
       hp: 3,
       curas: 2,
-      magia: 0,
+      magia: 1,
       velocidad: 1,
       dano: 1,
       rango: 1,

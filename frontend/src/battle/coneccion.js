@@ -168,6 +168,14 @@ export function esperar(tipo, tiempoMaximo = TIEMPO_MAXIMO_POR_DEFECTO) {
     });
 }
 
+/** Configs de la ronda anterior no deben resolverse como la jugada nueva. */
+export function vaciarBuzonDeConfigs() {
+    const tipos = ['Recibir_Config_Acciones', 'Recibir_Config_Acciones_Final'];
+    for (let i = buzon.length - 1; i >= 0; i -= 1) {
+        if (tipos.includes(buzon[i]?.type)) buzon.splice(i, 1);
+    }
+}
+
 export function cancelarEsperas(tipos) {
     const lista = Array.isArray(tipos) ? tipos : [tipos];
     for (let i = esperas.length - 1; i >= 0; i -= 1) {
@@ -226,12 +234,12 @@ export function enviarConfiguracion(configuracion, esFinal) {
  * Escucha al rival sin asumir que ya cerro. Resultado_Partida entra para
  * que una pestana cerrada no deje esta promesa abierta.
  */
-export async function recibirConfigDelRival() {
+export async function recibirConfigDelRival(tiempoMaximo) {
     const respuesta = await esperar([
         'Recibir_Config_Acciones',
         'Recibir_Config_Acciones_Final',
         'Resultado_Partida',
-    ]);
+    ], tiempoMaximo);
     return {
         type: respuesta.type,
         data: respuesta.data,
@@ -257,6 +265,7 @@ export const transporte = {
     enviarConfigAccionesFinal,
     enviarConfiguracion,
     recibirConfigDelRival,
+    vaciarBuzonDeConfigs,
     enviarPartidaFinalizada,
     esperarResultadoPartida,
     cerrarConeccion,

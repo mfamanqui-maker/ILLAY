@@ -7,8 +7,10 @@
  * `objetivo` son coordenadas base 1 `{ x, y }`.
  */
 
-import { calcularRayoHastaBorde, moverEnTablero } from '../../tablero/UtilsTablero.js';
-import { AccionesDiana, costeDeAccion, gastarFichas, lanzadorDe } from './diana.js';
+import { afectadosPorRayo, calcularRayoHastaBorde, moverEnTablero, objetivosRayoDeMagia } from '../../tablero/UtilsTablero.js';
+
+export { afectadosPorRayo, objetivosRayoDeMagia };
+import { AccionesDiana, consumirEscudo, costeDeAccion, gastarFichas, lanzadorDe } from './diana.js';
 
 function casillaDe(tablero, objetivo) {
   if (!tablero || !objetivo) return null;
@@ -113,15 +115,23 @@ export class AccionesDianaCasilla {
     return (objetivo, contexto) => {
       const lanzador = lanzadorDe(contexto);
       const coste = costeDeAccion(contexto?.tarea?.accion, 'rayo de magia');
-      if (!gastarFichas(lanzador, coste)) return;
+      if (!gastarFichas(lanzador, coste)) return [];
       const origen = lanzador.datos?.posicion;
       const celdas = calcularRayoHastaBorde(origen, objetivo, contexto?.tablero);
       const dano = cantidad ?? Number(lanzador.estadisticas.dano ?? 0) + 3;
-      if (contexto?.tarea) contexto.tarea.rayoCeldas = celdas;
-      celdas.forEach((celda) => {
+      const afectados = afectadosPorRayo(origen, objetivo, contexto?.tablero, lanzador?.id);
+      if (contexto?.tarea) {
+        contexto.tarea.rayoCeldas = celdas;
+        contexto.tarea.afectados = afectados.map((a) => a.id);
+      }
+      const anulados = new Set(
+        (contexto?.tarea?.rayoHitsAnulados ?? []).map((id) => String(id)),
+      );
+      afectados.forEach(({ id, celda }) => {
         const casilla = casillaDe(contexto?.tablero, celda);
         const entidad = casilla?.entidad;
-        if (!entidad?.estadisticas || entidad === lanzador) return;
+        if (!entidad?.estadisticas || String(entidad.id) !== String(id)) return;
+        if (anulados.has(String(entidad.id))) return;
         const pos = entidad.datos?.posicion;
         if (
           !pos
@@ -141,8 +151,10 @@ export class AccionesDianaCasilla {
         };
         contexto?.pila?.verificar?.('alRecibirProyectil', ctxHit);
         if (anulado || Number(ctxHit.dano) <= 0) return;
+        if (consumirEscudo(entidad)) return;
         AccionesDiana.hacerDano(Number(ctxHit.dano) || dano)(entidad, contexto);
       });
+      return afectados.map((a) => a.id);
     };
   }
 }

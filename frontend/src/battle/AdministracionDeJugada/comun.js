@@ -27,7 +27,23 @@ export function listaDe(configDelTurno, id) {
 export function filasDeConfig(configDelTurno) {
   return [...(configDelTurno?.values?.() ?? [])]
     .flatMap((v) => (Array.isArray(v) ? v : [v]))
-    .map(({ id, nombreDeAccion, objetivo, azar }) => ({
+    .map(({ id, nombreDeAccion, objetivo, azar, afectados }) => ({
       id, nombreDeAccion, objetivo, azar: azar ?? null,
+      ...(Array.isArray(afectados) ? { afectados } : {}),
     }));
+}
+
+function mismaFilaEscudar(a, b) {
+  return String(a?.id) === String(b?.id) && a?.nombreDeAccion === 'escudar';
+}
+
+/** La cola viva manda: si el jugador eligio escudar, tiene que estar en configPropia. */
+export function asegurarEscudarEnPropia(configPropia, configDelTurno) {
+  const propia = [...(configPropia ?? [])];
+  filasDeConfig(configDelTurno).forEach((fila) => {
+    if (fila.nombreDeAccion !== 'escudar') return;
+    if (propia.some((p) => mismaFilaEscudar(p, fila))) return;
+    propia.push(fila);
+  });
+  return propia;
 }

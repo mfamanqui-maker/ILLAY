@@ -36,7 +36,8 @@ export class AccionesDianaEnemigo {
       const blanco = resolverPotestad(objetivo, contexto?.registro);
       if (!blanco) return;
       const base = Number(cantidad ?? lanzador.estadisticas.dano ?? 0);
-      const dano = lanzador.estadisticas.apuntando === blanco.id ? base * 2 : base;
+      const apuntado = String(lanzador.estadisticas.apuntando) === String(blanco.id);
+      const dano = apuntado ? base * 2 : base;
       AccionesDiana.hacerDano(dano)(objetivo, contexto);
       lanzador.estadisticas.apuntando = null;
       quitarEfecto(lanzador, 'caza');

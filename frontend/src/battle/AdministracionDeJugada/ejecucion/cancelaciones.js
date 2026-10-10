@@ -10,6 +10,7 @@
  */
 
 import { anulaPorGolpe } from '../../datosDePotestades/acciones/catalogo.js';
+import { consumirEscudo } from '../../datosDePotestades/acciones/diana.js';
 import { MOMENTOS } from './pilaPasivas.js';
 import {
   blancoDeTarea,
@@ -28,6 +29,10 @@ function cancelarUna(tarea, pila) {
   if (faseDeTarea(tarea) !== 'proyectil') return false;
   const blanco = blancoDeTarea(tarea);
   if (blanco?.pactoActivo) return true;
+  if (consumirEscudo(blanco, { conservarAura: true })) {
+    tarea.bloqueadaPor = blanco;
+    return true;
+  }
   if (anulaPorGolpe(nombreDeTarea(tarea))) return false;
   const idBlanco = idObjetivoTarea(tarea);
   if (idBlanco == null) return false;

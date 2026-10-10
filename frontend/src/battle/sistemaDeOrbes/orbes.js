@@ -1020,14 +1020,6 @@ export default class SistemaDeOrbes {
     return true;
   }
 
-  /**
-   * Fase 2 de configtype1: PhaserMaster pinta la sesion; aqui no se abren orbes.
-   */
-  abrirDefensaTipo1() {
-    this.onDeseleccionar();
-    return false;
-  }
-
   onDeseleccionar() {
     if (!this._estaSeleccionado && !this.tareaPendienteObjetivo) return;
     this._estaSeleccionado = false;

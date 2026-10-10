@@ -111,7 +111,7 @@ export class Intelectual {
     this.estadisticas = {
       hp: 3,
       escudos: 2,
-      conocimiento: 3,
+      conocimiento: 1,
       velocidad: 1,
       dano: 1,
       rango: 1,

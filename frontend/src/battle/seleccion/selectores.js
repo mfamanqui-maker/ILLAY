@@ -16,7 +16,6 @@ import {
   obtenerRangoAccion,
 } from './casos.js';
 import { aplicarMarcasSeleccion } from './marcas.js';
-import { idsAmenazadosPorRival } from './amenazas.js';
 
 function resultadoEntidad(bandos, contexto, accion) {
   const rango = obtenerRangoAccion(accion);
@@ -30,50 +29,9 @@ function resultadoEntidad(bandos, contexto, accion) {
   return aplicarMarcasSeleccion(resultado, contexto);
 }
 
-/** Si hay 2+ proyectiles: etiquetas de lo que hizo cada enemigo y diana de aliados. */
-export function mostrarJugadasEnemigasYElegirDefensa(resultado, contexto) {
-  if (!contexto) return resultado;
-  return aplicarMarcasSeleccion({ ...resultado, etiquetasRival: true }, contexto);
-}
-
-function resultadoPosterior(bandos, contexto, accion) {
-  if (contexto?.configuracionRival == null) {
-    return { tipo: 'posterior', bandos, candidatos: [], esperaRival: true };
-  }
-
-  const amenazados = idsAmenazadosPorRival(
-    contexto.configuracionRival,
-    contexto.potestades,
-    contexto.tablero,
-  );
-  const rango = obtenerRangoAccion(accion);
-  const enRango = candidatosPorBando(contexto?.potestades, bandos, contexto?.origen, rango);
-  const idDefensor = contexto?.origenPotestad?.id;
-  const candidatos = enRango.filter((entrada) => {
-    const id = String(entrada.potestad?.id);
-    if (!amenazados.has(id)) return false;
-    if (idDefensor != null && id === String(idDefensor)) return false;
-    return true;
-  });
-
-  // 0 amenazas: no hace nada. 1: auto. >1: el defensor elige.
-  if (candidatos.length <= 1) {
-    return {
-      tipo: 'automatico',
-      bandos,
-      candidatos,
-      esperaRival: false,
-      objetivoAuto: candidatos[0]?.potestad?.id ?? null,
-    };
-  }
-
-  return mostrarJugadasEnemigasYElegirDefensa({
-    tipo: 'entidad',
-    bandos,
-    candidatos,
-    esperaRival: false,
-    etiquetasRival: true,
-  }, contexto);
+/** configtype1: no pide diana ahora; solo marca que hay que esperar al rival. */
+function resultadoPosterior(bandos) {
+  return { tipo: 'posterior', bandos, candidatos: [], esperaRival: true };
 }
 
 export function seleccionarDiana(accion, contexto) {
@@ -88,16 +46,16 @@ export function seleccionarDianaAliado(accion, contexto) {
   return resultadoEntidad(['Aliados'], contexto, accion);
 }
 
-export function seleccionarConfigType1(accion, contexto) {
-  return resultadoPosterior(['Aliados', 'Enemigos'], contexto, accion);
+export function seleccionarConfigType1() {
+  return resultadoPosterior(['Aliados', 'Enemigos']);
 }
 
-export function seleccionarConfigType1Aliado(accion, contexto) {
-  return resultadoPosterior(['Aliados'], contexto, accion);
+export function seleccionarConfigType1Aliado() {
+  return resultadoPosterior(['Aliados']);
 }
 
-export function seleccionarConfigType1Enemigo(accion, contexto) {
-  return resultadoPosterior(['Enemigos'], contexto, accion);
+export function seleccionarConfigType1Enemigo() {
+  return resultadoPosterior(['Enemigos']);
 }
 
 export function seleccionarCasilla(accion, contexto) {

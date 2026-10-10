@@ -8,7 +8,7 @@
  * La config del rival ya llega en POV local.
  */
 
-import { calcularRayoHastaBorde } from '../tablero/UtilsTablero.js';
+import { afectadosPorRayo } from '../tablero/UtilsTablero.js';
 import { anulaPorGolpe, esProyectil } from '../datosDePotestades/acciones/catalogo.js';
 import { entradaPorId, filasDeConfigRival } from './comun.js';
 
@@ -35,15 +35,9 @@ function impactosEnLinea(fila, nombre, entrada, potestades, tablero) {
   if (!dest || !Number.isFinite(Number(dest.x)) || !Number.isFinite(Number(dest.y))) return [];
   const origen = entrada?.potestad?.datos?.posicion;
   if (!origen) return [];
-  const impactos = [];
-  calcularRayoHastaBorde(origen, dest, tablero).forEach((celda) => {
-    const entidad = tablero[Number(celda.y) - 1]?.[Number(celda.x) - 1]?.entidad;
-    if (!entidad?.estadisticas) return;
-    const hallada = entradaPorId(potestades, entidad.id);
-    if (hallada?.bando !== 'Aliados') return;
-    impactos.push({ idBlanco: String(entidad.id), nombre });
-  });
-  return impactos;
+  return afectadosPorRayo(origen, dest, tablero, fila.id)
+    .filter((a) => entradaPorId(potestades, a.id)?.bando === 'Aliados')
+    .map((a) => ({ idBlanco: String(a.id), nombre }));
 }
 
 function recolectarImpactosRival(configuracionRival, potestades, tablero = null) {

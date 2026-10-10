@@ -176,8 +176,9 @@ export default class GenerarInterfaz extends Phaser.Scene {
 
   actualizarPorFase(estadoRonda) {
     const esperando = estadoRonda === 'esperandoRival';
+    const escudo = estadoRonda === 'escudo';
     this._bloqueadoPorEspera = esperando;
-    this._setBotonHabilitado(this.botones?.confirmar, !esperando);
+    this._setBotonHabilitado(this.botones?.confirmar, !esperando && !escudo);
     this._setBotonHabilitado(this.botones?.rendirse, !esperando);
     this._setBotonHabilitado(this.botones?.historial, !esperando);
     this._setBotonHabilitado(this.botones?.ignorarInterfaz, true);

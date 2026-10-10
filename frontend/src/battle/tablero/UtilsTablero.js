@@ -454,3 +454,28 @@ export function calcularRayoHastaBorde(origen, destino, tablero) {
     tablero,
   );
 }
+
+/** Quienes estan en la linea del rayo (excepto el lanzador). */
+export function afectadosPorRayo(origen, destinoCasilla, tablero, idLanzador = null) {
+  if (!origen || !destinoCasilla || !tablero) return [];
+  const celdas = calcularRayoHastaBorde(origen, destinoCasilla, tablero);
+  const vistos = new Set();
+  const skip = idLanzador != null ? String(idLanzador) : null;
+  const out = [];
+  celdas.forEach((celda, indiceRayo) => {
+    const entidad = tablero[Number(celda.y) - 1]?.[Number(celda.x) - 1]?.entidad;
+    if (!entidad?.estadisticas || entidad.id == null) return;
+    const clave = String(entidad.id);
+    if (vistos.has(clave) || clave === skip) return;
+    vistos.add(clave);
+    out.push({ id: entidad.id, indiceRayo, celda });
+  });
+  return out;
+}
+
+/** Aliados alcanzados por el rayo (ids + celda + orden en la línea). */
+export function objetivosRayoDeMagia(origen, destinoCasilla, tablero, registro) {
+  return afectadosPorRayo(origen, destinoCasilla, tablero)
+    .filter((a) => registro?.obtenerPorId?.(a.id)?.bando === 'Aliados')
+    .map((a) => ({ idObjetivo: a.id, indiceRayo: a.indiceRayo, celda: a.celda }));
+}

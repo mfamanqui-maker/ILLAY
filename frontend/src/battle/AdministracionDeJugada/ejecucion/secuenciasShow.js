@@ -145,6 +145,7 @@ export async function animBloqueoEscudo(entorno, potestad) {
   escena.time.delayedCall(440, () => emisor.destroy());
   const circulo = potestad._auraEscudo?.circulo;
   if (circulo) await tweenShow(escena, { targets: circulo, scale: 1.3, yoyo: true, duration: 150 });
+  quitarAuraEscudo(potestad);
 }
 
 export async function reproducirMovimientoConMina(entradaMove, entradasDano, explosion, entorno, lanzar) {

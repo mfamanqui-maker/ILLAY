@@ -20,3 +20,7 @@ https://alliy.site/IllayRebirth/frontend/app.html
 activar el servidor real: node backend/server.js + ngrok http 8080
 
 prueba-conexion: 2026-09-24 — si ves esta linea, nota.md se actualizo desde Cursor
+
+
+
+

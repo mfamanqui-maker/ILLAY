@@ -8,6 +8,20 @@
  * que se repiten: resolver el blanco y aplicar dano o cura.
  */
 
+/** Un escudo para un golpe: al bloquear se apaga y no cubre el siguiente. */
+export function consumirEscudo(entidad, { conservarAura = false } = {}) {
+  if (!entidad?.activacionEscudo) return false;
+  entidad.activacionEscudo = false;
+  if (conservarAura) return true;
+  const aura = entidad._auraEscudo;
+  if (aura) {
+    aura.escena?.events?.off?.('update', aura.seguir);
+    aura.circulo?.destroy?.();
+    entidad._auraEscudo = null;
+  }
+  return true;
+}
+
 export function resolverPotestad(objetivo, registro = null) {
   if (!objetivo || objetivo === false) return null;
   if (objetivo.estadisticas) return objetivo;
@@ -116,6 +130,7 @@ export class AccionesDiana {
         return;
       }
       if (blanco.pactoActivo) return;
+      if (consumirEscudo(blanco)) return;
       const n = Number(cantidad ?? 0);
       if (!Number.isFinite(n)) return;
       blanco.estadisticas.hp = Number(blanco.estadisticas.hp ?? 0) - n;

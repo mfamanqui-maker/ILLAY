@@ -3,12 +3,11 @@
  *
  * SPECT: docs/spects/spect004.md
  *
- * Escribe en configDelTurno respetando el cupo de accionismo. En la
- * segunda capa de tipo 1 la eleccion no apila: completa el objetivo que
- * faltaba (parchearObjetivoTipo1). PhaserMaster solo llama aqui al cambiar
- * de fase y al borrar/marcar. Las orbes leen los Maps.
+ * Escribe en configDelTurno respetando el cupo de accionismo.
+ * PhaserMaster solo llama aqui al cambiar de fase y al borrar/marcar.
  */
 
+import { anulaPorGolpe } from '../../datosDePotestades/acciones/catalogo.js';
 import {
   colocarFantasmaMovilidad,
   cupoAccionismo,
@@ -16,7 +15,8 @@ import {
   marcarAccionismoGastado,
   quitarFantasmaMovilidad,
 } from '../../seleccion/index.js';
-import { buscarAccion, entradaDe, listaDe } from '../comun.js';
+import { afectadosPorRayo } from '../../tablero/UtilsTablero.js';
+import { buscarAccion, listaDe } from '../comun.js';
 import { aplicarPermanentes, quitarPermanentePorFila } from './permanentes.js';
 
 export function filasDeCola(configDelTurno, id, potestad) {
@@ -51,26 +51,23 @@ export function apilarAccion(configDelTurno, permanentes, id, fila, cupo) {
 export function quitarDeCola(configDelTurno, permanentes, id, indiceLista) {
   const lista = listaDe(configDelTurno, id);
   const fila = lista[indiceLista];
-  if (!fila) return null;
-  lista.splice(indiceLista, 1);
-  if (lista.length === 0) configDelTurno.delete(id);
-  else configDelTurno.set(id, lista);
-  if (fila.permanente) quitarPermanentePorFila(permanentes, id, fila);
-  return fila;
-}
+  if (!fila) return [];
 
-/** Rellena el objetivo de un configtype1 / escudar que aun no tenia diana. */
-export function parchearObjetivoTipo1(configDelTurno, registro, id, nombreDeAccion, objetivo) {
-  const lista = listaDe(configDelTurno, id);
-  if (lista.length === 0) return false;
-  const fila = lista.find((f) => f.nombreDeAccion === nombreDeAccion && f.objetivo == null)
-    ?? lista.find((f) => f.objetivo == null);
-  if (!fila) return false;
-  const tipo = String(buscarAccion(entradaDe(registro, id)?.potestad, fila.nombreDeAccion)?.type ?? '').toLowerCase();
-  if (!tipo.includes('configtype1') && nombreDeAccion !== 'escudar') return false;
-  fila.objetivo = objetivo;
-  if (nombreDeAccion) fila.nombreDeAccion = nombreDeAccion;
-  return true;
+  const quitadas = esAccionDeMovilidad(fila.nombreDeAccion)
+    ? lista.filter((f) => esAccionDeMovilidad(f?.nombreDeAccion))
+    : [fila];
+
+  const quedan = esAccionDeMovilidad(fila.nombreDeAccion)
+    ? lista.filter((f) => !esAccionDeMovilidad(f?.nombreDeAccion))
+    : lista.filter((_, i) => i !== indiceLista);
+
+  if (quedan.length === 0) configDelTurno.delete(id);
+  else configDelTurno.set(id, quedan);
+
+  quitadas.forEach((f) => {
+    if (f.permanente) quitarPermanentePorFila(permanentes, id, f);
+  });
+  return quitadas;
 }
 
 /** Ultima movilidad de la cola pinta el fantasma; si no hay, se quita. */
@@ -92,23 +89,25 @@ export function inyectarPermanentesEnFase(configDelTurno, permanentes, registro,
   });
 }
 
-/**
- * Escribe la eleccion en configDelTurno.
- * Devuelve 'cerrarTipo1' si hay que reintentar el _Final.
- */
+function afectadosDeFila(id, nombreDeAccion, objetivo, escena) {
+  if (!anulaPorGolpe(nombreDeAccion) || !objetivo) return undefined;
+  const origen = escena.registro?.obtenerPorId?.(id)?.potestad?.datos?.posicion;
+  const ids = afectadosPorRayo(origen, objetivo, escena.tablero, id).map((a) => a.id);
+  return ids;
+}
+
+/** Escribe la eleccion en configDelTurno. */
 export function registrarEleccion(escena, { id, nombreDeAccion, objetivo, azar }) {
   const entrada = escena.registro?.obtenerPorId(id);
-  if (escena.idsPendientes && parchearObjetivoTipo1(escena.configDelTurno, escena.registro, id, nombreDeAccion, objetivo)) {
-    return 'cerrarTipo1';
-  }
   const cupo = cupoAccionismo(entrada?.potestad);
   if (cupo < 1) return 'nada';
+  const afectados = afectadosDeFila(id, nombreDeAccion, objetivo, escena);
   const { lista, gastada } = apilarAccion(
     escena.configDelTurno, escena.permanentes, id,
-    { id, nombreDeAccion, objetivo, azar: azar ?? null },
+    { id, nombreDeAccion, objetivo, azar: azar ?? null, ...(afectados ? { afectados } : {}) },
     cupo,
   );
   if (gastada) marcarAccionismoGastado(entrada?.potestad);
   actualizarFantasmaMovilidad(entrada?.potestad, lista, escena, escena.administrador?.tileSize);
-  return escena.idsPendientes ? 'cerrarTipo1' : 'ok';
+  return 'ok';
 }

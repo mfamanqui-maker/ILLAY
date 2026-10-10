@@ -7,7 +7,23 @@ import { montar, precargar } from './tablero/index.js';
 import { aplicarAccionismoDelTurno, cupoAccionismo, iniciarBrilloAccionismo, liberarAccionismo, reiniciarAccionismo, restaurarBrillosAccionismo } from './seleccion/index.js';
 import { abrirPanel } from './panelEntidad/index.js';
 import { transporte } from './coneccion.js';
-import { actualizarFantasmaMovilidad, cerrarSesionTipo1, conmutarPermanente, correrTurno, ctxRonda, faseTipo1Cerrada, inyectarPermanentesEnFase, negociar, quitarDeCola, recolectarColaTipo1, recorrerColaTipo1, registrarEleccion, resolverFinDeBatalla } from './AdministracionDeJugada/index.js';
+import {
+  actualizarFantasmaMovilidad,
+  conmutarPermanente,
+  correrTurno,
+  ctxRonda,
+  inyectarPermanentesEnFase,
+  negociar,
+  precombate,
+  quitarDeCola,
+  registrarEleccion,
+  resolverFinDeBatalla,
+  buscarInformacionDeRival,
+  asegurarEscudarEnPropia,
+  filasDeConfig,
+  utilsType1,
+} from './AdministracionDeJugada/index.js';
+import { abrirFaseEscudo } from './faseEscudo.js';
 
 export const CLAVE_ESCENA_MUNDO = 'PhaserMaster';
 
@@ -69,7 +85,10 @@ export default class PhaserMaster extends Phaser.Scene {
   }
 
   _inputsBloqueados() {
-    return this._negociando || this.estadoRonda === 'esperandoRival' || this.estadoRonda === 'ejecutando';
+    return this._negociando
+      || this.estadoRonda === 'esperandoRival'
+      || this.estadoRonda === 'escudo'
+      || this.estadoRonda === 'ejecutando';
   }
 
   _puedeAbrirOrbes(entidad) {
@@ -99,7 +118,7 @@ export default class PhaserMaster extends Phaser.Scene {
 
   _alElegirAccion(payload) {
     if (this._inputsBloqueados()) return;
-    if (registrarEleccion(this, payload) === 'cerrarTipo1') this._intentarCerrarFaseTipo1();
+    registrarEleccion(this, payload);
   }
 
   _alEliminarDeCola({ id, indiceLista }) {
@@ -122,9 +141,21 @@ export default class PhaserMaster extends Phaser.Scene {
   _alCerrarPanel() {}
 
   async _alConfirmarJugada() {
-    if (this._negociando || this.estadoRonda === 'ejecutando') return;
+    if (this._negociando || this._sesionTipo1 || this.estadoRonda === 'ejecutando') return;
     this._cerrarOrbes();
     this._cambiarFase('esperandoRival');
+    const extra = await buscarInformacionDeRival(this.configDelTurno, ctxRonda(this));
+    if (extra?.fase === 'terminada') return this._terminarBatalla(extra.resultado, true);
+    if (extra?.rival) {
+      this._recibirConfiguracionRival(extra.rival);
+      this.configPropia = asegurarEscudarEnPropia(
+        this.configPropia ?? filasDeConfig(this.configDelTurno),
+        this.configDelTurno,
+      );
+      this._cambiarFase('escudo');
+      await utilsType1(this.configRival, this.configPropia, this.registro, this);
+      this._cambiarFase('esperandoRival');
+    }
     await this._negociarUnaVez();
     if (this._reconfirmarPendiente) {
       this._reconfirmarPendiente = false;
@@ -146,31 +177,18 @@ export default class PhaserMaster extends Phaser.Scene {
 
   async _aplicarResultadoRonda(resultado) {
     if (resultado.fase === 'terminada') return this._terminarBatalla(resultado.resultado, true);
-    this.configPropia = resultado.propia ?? [];
+    this.configPropia = asegurarEscudarEnPropia(resultado.propia, this.configDelTurno);
     this._recibirConfiguracionRival(resultado.rival);
-    this.idsPendientes = resultado.fase === 'seleccionando' ? resultado.idsPendientes : null;
+    this.idsPendientes = resultado.fase === 'seleccionando' 
+      ? resultado.idsPendientes 
+      : null;
+
     if (resultado.fase === 'precombate') {
       this._cambiarFase('precombate');
+      await precombate(this);
       return this._ejecutarTurno();
     }
     this._cambiarFase('seleccionando');
-    if (resultado.fase === 'seleccionando') await this._continuarFaseTipo1();
-  }
-
-  async _continuarFaseTipo1() {
-    const cola = recolectarColaTipo1(this.configDelTurno, this.registro, this.configRival, this.tablero);
-    if (cola.length > 0) await recorrerColaTipo1(this, cola);
-    await this._intentarCerrarFaseTipo1();
-  }
-
-  async _intentarCerrarFaseTipo1() {
-    if (!faseTipo1Cerrada(this.configDelTurno, this.registro, this.configRival, this.tablero)) return;
-    this.idsPendientes = null;
-    if (this._negociando) {
-      this._reconfirmarPendiente = true;
-      return;
-    }
-    await this._alConfirmarJugada();
   }
 
   async _alRendirse() {
@@ -220,7 +238,7 @@ export default class PhaserMaster extends Phaser.Scene {
   }
 
   shutdown() {
-    cerrarSesionTipo1(this);
+    this._cerrarFaseEscudo?.();
     this._cerrarOrbes();
     this._desregistrarInputs();
     this.administrador?.destruir();

@@ -54,8 +54,8 @@ function soltarCaza(registro, marca) {
   quitarEfecto(cazador, 'caza');
 }
 
-/** Apuntar: el marcado que se mueve recibe el dano de la marca. */
-function aplicarMarcaApuntarPorMovimiento(tarea, registro) {
+/** Caza: el marcado que actua (moverse, permanente, lo que sea) recibe el dano. */
+function aplicarMarcaCazaSiActua(tarea, registro) {
   const marcado = tarea?.potestad;
   if (!marcado?.marcadoApuntar || !marcado.estadisticas) return false;
   const marca = marcado.marcadoApuntar;
@@ -146,10 +146,10 @@ function crearProcesador(foto, entorno, anims, resueltas) {
 
     if (fase === 'movimiento') {
       anims.push(...animsPasivasPorDisparos(pila.verificar(MOMENTOS.moverseACasilla, ctxBase), ctxBase));
-      if (aplicarMarcaApuntarPorMovimiento(tarea, entorno.registro)) {
-        const anim = entradaAnimPasiva(tarea.potestad, claveAnimPasiva('dano'));
-        if (anim) anims.push(anim);
-      }
+    }
+    if (aplicarMarcaCazaSiActua(tarea, entorno.registro)) {
+      const anim = entradaAnimPasiva(tarea.potestad, claveAnimPasiva('dano'));
+      if (anim) anims.push(anim);
     }
     if (tarea.trampaPisada) {
       const anim = entradaAnimPasiva(tarea.potestad, claveAnimPasiva('dano'));
