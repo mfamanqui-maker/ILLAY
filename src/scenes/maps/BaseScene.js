@@ -7,17 +7,17 @@ export default class BaseScene extends Phaser.Scene {
   // CARGAR ASSETS COMUNES (llamar en preload de la hija)
   // ══════════════════════════════════════
   cargarAssets() {
-    this.load.image('tileset', 'assets/images/maps/tileset_1bit.png');
-    this.load.spritesheet('right', 'assets/images/maps/WalkRight.png', {
+    this.load.image('tileset', 'assets/images/tileset_1bit.png');
+    this.load.spritesheet('right', 'assets/images/WalkRight.png', {
       frameWidth: 32, frameHeight: 32
     });
-    this.load.spritesheet('up', 'assets/images/maps/WalkUp.png', {
+    this.load.spritesheet('up', 'assets/images/WalkUp.png', {
       frameWidth: 32, frameHeight: 32
     });
-    this.load.spritesheet('left', 'assets/images/maps/WalkLeft.png', {
+    this.load.spritesheet('left', 'assets/images/WalkLeft.png', {
       frameWidth: 32, frameHeight: 32
     });
-    this.load.spritesheet('down', 'assets/images/maps/WalkDown.png', {
+    this.load.spritesheet('down', 'assets/images/WalkDown.png', {
       frameWidth: 32, frameHeight: 32
     });
   }

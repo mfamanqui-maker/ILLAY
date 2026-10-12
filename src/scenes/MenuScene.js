@@ -3,11 +3,11 @@ export default class MenuScene extends Phaser.Scene {
     super({ key: 'menu' });
   }
   preload() {
-    this.load.image('fondo', 'assets/images/system/menu.png');
+    this.load.image('fondo', 'assets/images/menu.png')
   }
   create() {
     this.add.image(850, 450, 'fondo').setOrigin(0.5).setScale(1.4)
-    this.add.text(850, 150, 'Illay SIN TEXTURAS', {
+    this.add.text(850, 150, 'Alliy SIN TEXTURAS', {
       fontFamily: 'impact',
       fontSize: '128px',
       color: '#d2d881',

@@ -218,9 +218,9 @@
         {
          "columns":5,
          "firstgid":1,
-         "image":"..\/images\/maps\/stone.png",
+         "image":"..\/images\/stone.png",
          "imageheight":96,
-         "imagewidth":80,
+         "imagewidth":88,
          "margin":0,
          "name":"sin texturas",
          "spacing":0,
@@ -231,7 +231,7 @@
         {
          "columns":8,
          "firstgid":31,
-         "image":"..\/images\/maps\/tileset_1bit.png",
+         "image":"..\/images\/tileset_1bit.png",
          "imageheight":128,
          "imagewidth":128,
          "margin":0,

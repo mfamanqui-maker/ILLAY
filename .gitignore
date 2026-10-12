@@ -1,5 +1,2 @@
 **/README.md
-node_modules/
-.env
-.cursor/
-.venv/
+git add .gitignore
