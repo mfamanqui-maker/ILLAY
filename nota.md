@@ -21,6 +21,9 @@ activar el servidor real: node backend/server.js + ngrok http 8080
 
 prueba-conexion: 2026-09-24 — si ves esta linea, nota.md se actualizo desde Cursor
 
+NO OLVIDAR:
 
+colocar los patrones en la carpeta de imagenes de batalla sino no se puede crear las colicion ni pintar nada
+antes de subir cualquier cambio a fileZilla hay que borrar toda la carpeta anterior para que no se guarden cosas en el cache 
 
 

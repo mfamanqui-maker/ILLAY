@@ -1,7 +1,5 @@
 import MenuScene from './MenuScene.js';
-import GlobalMapScene from './maps/globalMapScene.js';
-import HouseMapScene from './maps/houseMapScene.js';
-import ShopMapScene from './maps/shopMapScene.js';
+import PhaserMaster from './maps/PhaserMaster.js';
 import CharacterSelectScene from './battle/vestibulo/characterSelectScene.js';
 import vista from './battle/vista.js';
 
@@ -29,9 +27,7 @@ const config = {
 
     //══════════════════Escenas de Mapas══════════════════
 
-    ShopMapScene,
-    GlobalMapScene,
-    HouseMapScene,
+    PhaserMaster,
 
     //══════════════════Escenas de batalla══════════════════
     

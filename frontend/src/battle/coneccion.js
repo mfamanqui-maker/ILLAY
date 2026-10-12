@@ -20,7 +20,16 @@ function exigirSocketAbierto() {
     }
 }
 
-const URL_WS = 'ws://localhost:8080';
+const URL_LOCAL = 'ws://localhost:8080';
+/** ejecutar ngrok 8080 para obtener la URL. */
+const URL_NGROK = 'https://chasing-uncharted-ambiance.ngrok-free.dev';
+
+function urlDelSocket() {
+    const host = typeof location === 'undefined' ? '' : location.hostname;
+    const esLocal = host === 'localhost' || host === '127.0.0.1' || host === '';
+    return esLocal ? URL_LOCAL : URL_NGROK;
+}
+
 const TIEMPO_MAXIMO_CONECCION = 2000;
 
 function esperarReloj(ms) {
@@ -45,7 +54,7 @@ export function coneccion() {
     return new Promise((resolve, reject) => {
         let terminado = false;
         let abrio = false;
-        const candidato = new WebSocket(URL_WS);
+        const candidato = new WebSocket(urlDelSocket());
 
         function fallar(error) {
             if (terminado) return;
