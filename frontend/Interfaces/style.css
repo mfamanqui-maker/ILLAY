@@ -1,0 +1,117 @@
+@font-face {
+  font-family: '';
+  src: url();
+}
+
+body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background-color: rgb(105, 56, 36);
+    background-size: 180px 180px ;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+  }
+  .menu-container {
+    width: 90%;
+    max-width: 1000px;
+    height: 85vh;
+    background-color: bisque;
+    border: 8px solid wheat;
+    border-radius: 4px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 40px;
+    box-sizing: border-box;
+  }
+  .page-title {
+    font-size: 26px;
+    color: rgb(90, 52, 37);
+    margin-bottom: 30px;
+    font-weight: normal;
+  }
+  .save-grid {
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 30px 40px;
+    width: 100%;
+  }
+  .save-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    text-align: center;
+  }
+  .screenshot-box:hover {
+    transform: scale(1.02);
+    box-shadow: 0 6px 15px rgba(220, 100, 180, 0.3);
+  }
+  .screenshot-box {
+    width: 100%;
+    aspect-ratio: 16/9;
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease;
+    cursor: pointer;
+    background-color: blueviolet;
+  }
+  /*
+  .screenshot-box.empty {
+      background-color: aliceblue;
+    }
+  */
+  .screenshot-box img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: brightness(0.7);
+    transition: filter 0.3s ease;
+  }
+  .save-slot.filled img {
+    filter: brightness(1.1)
+  }
+  .slot-time {
+    font-size: 15px;
+    color:gray;
+    margin-top: 8px;
+    margin-bottom: 4px;
+  }
+  .slot-status {
+    font-size: 16px;
+    color: gray;
+    font-weight: 500;
+  }
+  .status-message {
+    font-size: 13px;
+    color:cadetblue;
+    font-weight: normal;
+    height: 15px;
+  }
+  .transparent-text {
+    color: transparent;
+    user-select: none;
+  }
+  .pages {
+    display: flex;
+    gap: 25px;
+  }
+  .pag-num {
+    color: darkred;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 50%;
+    transition: background 0.2s;
+  }
+  .pag-num:hover, .pag-num.active {
+    background-color: brown;
+    color: white;
+  }
+
