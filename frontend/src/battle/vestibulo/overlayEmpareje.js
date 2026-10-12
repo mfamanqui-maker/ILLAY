@@ -28,8 +28,8 @@ export default class OverlayEmpareje {
         );
         escena.load.atlas(
             'transicionAtlas', 
-            'assets/images/battle/personajes/transicón.png', 
-            'assets/images/battle/personajes/transicón.json'
+            'assets/images/battle/personajes/transicion.png',
+            'assets/images/battle/personajes/transicion.json'
         );
     }
 
@@ -74,7 +74,7 @@ export default class OverlayEmpareje {
 
     mostrar(claveAnim, mensaje) {
         this.sprite.setVisible(true);
-        this.sprite.play(claveAnim);
+        if (this.escena.anims.exists(claveAnim)) this.sprite.play(claveAnim);
         this.cubrirPantalla(this.sprite);
         this.texto.setText(mensaje).setVisible(true);
     }
@@ -150,7 +150,9 @@ export default class OverlayEmpareje {
             });
         });
         sprite.setVisible(true).setAlpha(1);
-        sprite.play({ key: 'anim_transicion', hideOnComplete: true, repeat: 0 });
+        if (this.escena.anims.exists('anim_transicion')) {
+            sprite.play({ key: 'anim_transicion', hideOnComplete: true, repeat: 0 });
+        }
         this.cubrirPantalla(sprite);
         sprite.setDepth(Number.MAX_SAFE_INTEGER);
         const anim = sprite.anims.currentAnim;

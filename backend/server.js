@@ -1,6 +1,7 @@
 const { WebSocketServer, WebSocket } = require('ws');
 const PUERTO = Number(process.env.PORT) || 8080;
-const wss = new WebSocketServer({ port: PUERTO });
+const wss = new WebSocketServer({ host: '0.0.0.0', port: PUERTO });
+console.log(`WebSocket listo en ws://localhost:${PUERTO} (ngrok apunta a este puerto)`);
 
 const TIEMPO_MAXIMO_COLA = 20000;
 

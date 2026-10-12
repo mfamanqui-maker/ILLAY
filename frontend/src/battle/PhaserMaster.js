@@ -25,7 +25,7 @@ import {
 } from './AdministracionDeJugada/index.js';
 import { abrirFaseEscudo } from './faseEscudo.js';
 
-export const CLAVE_ESCENA_MUNDO = 'PhaserMaster';
+export const CLAVE_ESCENA_MUNDO = 'BatallaMundo';
 
 /** Evento del emisor -> metodo. Anadir un input es una fila. */
 const RUTAS_DE_INPUT = {

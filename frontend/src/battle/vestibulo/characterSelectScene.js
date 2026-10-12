@@ -5,7 +5,7 @@
  * y el salto a PhaserMaster. No dibuja el grid ni habla WebSocket a pelo.
  */
 
-import { coneccion, buscarPartida, esperarPartida, esperarReloj, cancelarEsperas, AdministradorTablero, descriptoresDeSpritesheet, precargarOrbes, lanzarBatallaEnFondo, OverlayEmpareje, ElementosFijos, TableroColocacion, BotonesAliados } from './indexVestibulo.js';
+import { coneccion, buscarPartida, esperarPartida, esperarReloj, cancelarEsperas, AdministradorTablero, descriptoresDeSpritesheet, precargarOrbes, lanzarBatallaEnFondo, OverlayEmpareje, ElementosFijos, TableroColocacion, BotonesAliados, CLAVE_ESCENA_MUNDO } from './indexVestibulo.js';
 
 export default class CharacterSelectScene extends Phaser.Scene {
     constructor() {
@@ -116,8 +116,21 @@ export default class CharacterSelectScene extends Phaser.Scene {
         ]);
         lanzarBatallaEnFondo(this, molde);
         this.overlay.vaciarSelectorMenosTransicion();
+        await this.esperarMundoListo();
         this.overlay.mantenerEncima();
         await this.overlay.reproducirTransicionYSalir();
+    }
+
+    esperarMundoListo() {
+        const mundo = this.game.scene.getScene(CLAVE_ESCENA_MUNDO);
+        if (!mundo) return esperarReloj(0);
+        if (mundo.tablero) return Promise.resolve();
+        return Promise.race([
+            new Promise((resolve) => {
+                mundo.events.once(Phaser.Scenes.Events.CREATE, resolve);
+            }),
+            esperarReloj(8000),
+        ]);
     }
 
     precargarRecursosDeBatalla(molde) {

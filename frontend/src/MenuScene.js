@@ -38,7 +38,7 @@ export default class MenuScene extends Phaser.Scene {
       strokeThickness: 10
     }).setOrigin(0.5)
 
-    play.on('pointerdown', () => { this.scene.start('globalMap') })
+    play.on('pointerdown', () => { this.scene.start('PhaserMaster') })
     Multijugador.on('pointerdown', () => { this.scene.start('CharacterSelectScene') })
 
   }

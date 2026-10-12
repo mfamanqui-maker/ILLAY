@@ -21,13 +21,21 @@ function exigirSocketAbierto() {
 }
 
 const URL_LOCAL = 'ws://localhost:8080';
-/** ejecutar ngrok 8080 para obtener la URL. */
+/** Pegar el Forwarding de ngrok. Da igual https o wss; aqui se corrige. */
 const URL_NGROK = 'https://chasing-uncharted-ambiance.ngrok-free.dev';
+
+function urlPublica() {
+    const cruda = String(URL_NGROK || '').trim();
+    if (!cruda) return URL_LOCAL;
+    return cruda.replace(/^https:\/\//i, 'wss://').replace(/^http:\/\//i, 'ws://');
+}
 
 function urlDelSocket() {
     const host = typeof location === 'undefined' ? '' : location.hostname;
-    const esLocal = host === 'localhost' || host === '127.0.0.1' || host === '';
-    return esLocal ? URL_LOCAL : URL_NGROK;
+    const esPaginaReal = host === 'alliy.site' || host.endsWith('.alliy.site');
+    const url = esPaginaReal ? urlPublica() : URL_LOCAL;
+    console.log('[coneccion]', esPaginaReal ? 'alliy.site → ngrok' : 'prueba local → 8080', url);
+    return url;
 }
 
 const TIEMPO_MAXIMO_CONECCION = 2000;
