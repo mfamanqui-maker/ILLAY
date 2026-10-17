@@ -1,5 +1,8 @@
 import BaseDatos from "./BaseDatos.js";
 import AdministradorMapas from "./chunks/Administrador.js";
+import Aldea, { claveInterior } from "./chunks/aldea.js";
+import BaseControl from "./BaseControl.js";
+import ControlDeCarga from "./controlDeCarga.js";
 
 export default class PhaserMaster extends Phaser.Scene {
   constructor() {
@@ -7,37 +10,149 @@ export default class PhaserMaster extends Phaser.Scene {
 
     this.baseDatos = null;
     this.administradorMapas = null;
+    this.control = null;
+    this.jugador = null;
+    this.carga = null;
+    this.listo = false;
   }
 
   init(configuracion = {}) {
     this.configuracion = configuracion;
   }
 
-  create() {
+  preload() {
+    ControlDeCarga.precargar(this);
+  }
+
+  async create() {
     console.log("[Illay] Iniciando mundo...");
+    this.listo = false;
+    this.carga = new ControlDeCarga(this);
+    this.carga.iniciar();
 
     this.baseDatos = new BaseDatos();
-
     const seed = this.configuracion?.seed;
-
     if (Number.isInteger(seed)) {
-      // Recuperar la identidad de una partida existente.
       this.baseDatos.establecerSemilla(seed);
     } else {
-      // Crear un mundo nuevo.
       this.baseDatos.generarSemilla();
     }
 
-    this.administradorMapas = new AdministradorMapas(
-      this.baseDatos
-    );
-
-    this.administradorMapas.iniciarGeneracion();
+    this.control = new BaseControl(this);
+    await this.carga.cargarMapas(this.control);
+    this.montarMundo();
+    await this.carga.mostrarCargados();
+    await this.carga.transicion();
+    this.listo = true;
 
     console.log(
       "[Illay] Mundo preparado:",
       this.baseDatos.obtenerSemilla()
     );
+  }
+
+  montarMundo() {
+    this.administradorMapas = new AdministradorMapas(
+      this,
+      this.baseDatos
+    );
+
+    this.administradorMapas.iniciarGeneracion();
+    this.administradorMapas.prepararTerreno(this);
+    this.administradorMapas.pintarTerreno();
+
+    const mundo = this.administradorMapas.obtenerExtensionMundo();
+    this.physics.world.setBounds(0, 0, mundo.ancho, mundo.alto);
+    this.cameras.main.setBounds(0, 0, mundo.ancho, mundo.alto);
+
+    this.aldea = new Aldea(this);
+    this.aldea.montar();
+    this.enAldea = false;
+    this.puntoRetorno = null;
+    this.teclaEntrar = this.input.keyboard.addKey(
+      Phaser.Input.Keyboard.KeyCodes.ENTER
+    );
+
+    const spawn = this.aldea.punto("inicio", 9);
+    this.jugador = this.control.crearJugador(spawn.x, spawn.y);
+    this.jugador.setCollideWorldBounds(true);
+    this.colisionTronco = this.physics.add.collider(
+      this.jugador,
+      this.administradorMapas.obtenerCapaTronco()
+    );
+    this.colisionAgua = this.physics.add.collider(
+      this.jugador,
+      this.administradorMapas.obtenerCapaSuelo()
+    );
+
+    this.entrarAldea("suroeste", true);
+  }
+
+  update() {
+    if (!this.listo) return;
+    this.control?.update();
+    if (!Phaser.Input.Keyboard.JustDown(this.teclaEntrar)) return;
+
+    if (this.enAldea) {
+      if (this.aldea.encimaDeSalida(this.jugador)) this.salirAlBosque();
+      return;
+    }
+
+    const tile = 32;
+    const tx = Math.floor(this.jugador.x / tile);
+    const ty = Math.floor(this.jugador.y / tile);
+    const aldea = this.administradorMapas.aldeaPegada(tx, ty);
+    if (aldea) this.entrarAldea(aldea.nombre);
+  }
+
+  entrarAldea(nombre, inicial = false) {
+    if (!inicial) {
+      this.puntoRetorno = { x: this.jugador.x, y: this.jugador.y };
+    }
+
+    const clave = claveInterior(nombre);
+    const registro = this.aldea.mostrar(clave);
+    const id = inicial ? registro.definicion.puntoInicio ?? registro.definicion.puntoEntrada
+      : registro.definicion.puntoEntrada;
+    const punto = this.aldea.punto(clave, id);
+
+    this.fijarBosque(false);
+    this.colocarJugador(punto.x, punto.y);
+    this.enAldea = true;
+    console.log(`[Aldea] Dentro de ${clave}`);
+  }
+
+  salirAlBosque() {
+    const destino = this.puntoRetorno
+      ?? this.administradorMapas.puntoJuntoA("suroeste");
+
+    this.aldea.ocultar();
+    this.fijarBosque(true);
+
+    const mundo = this.administradorMapas.obtenerExtensionMundo();
+    this.physics.world.setBounds(0, 0, mundo.ancho, mundo.alto);
+    this.cameras.main.setBounds(0, 0, mundo.ancho, mundo.alto);
+    this.colocarJugador(destino.x, destino.y);
+    this.enAldea = false;
+    console.log("[Aldea] De vuelta al bosque");
+  }
+
+  fijarBosque(visible) {
+    this.administradorMapas.fijarTerrenoVisible(visible);
+    if (this.colisionTronco) this.colisionTronco.active = visible;
+    if (this.colisionAgua) this.colisionAgua.active = visible;
+  }
+
+  colocarJugador(x, y) {
+    this.cameras.main.stopFollow();
+    this.jugador.setPosition(x, y);
+    this.jugador.setDepth(y + 50);
+    this.cameras.main.centerOn(x, y);
+    this.cameras.main.startFollow(this.jugador, false, 0.1, 0.1);
+  }
+
+  obtenerJugador() {
+    return this.jugador;
   }
 
   obtenerBaseDatos() {

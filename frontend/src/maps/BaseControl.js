@@ -9,8 +9,36 @@ export default class BaseControl {
       this.direction = "down";
     }
   
+    precargar() {
+      const scene = this.scene;
+      const marco = { frameWidth: 32, frameHeight: 32 };
+
+      scene.load.spritesheet("down", "assets/images/maps/WalkDown.png", marco);
+      scene.load.spritesheet("left", "assets/images/maps/WalkLeft.png", marco);
+      scene.load.spritesheet("up", "assets/images/maps/WalkUp.png", marco);
+      scene.load.spritesheet("right", "assets/images/maps/WalkRight.png", marco);
+    }
+
+    crearAnimaciones() {
+      const scene = this.scene;
+
+      for (const direccion of ["down", "left", "up", "right"]) {
+        const clave = `walk-${direccion}`;
+        if (scene.anims.exists(clave)) continue;
+
+        scene.anims.create({
+          key: clave,
+          frames: scene.anims.generateFrameNumbers(direccion, { start: 0, end: 7 }),
+          frameRate: 10,
+          repeat: -1
+        });
+      }
+    }
+
     crearJugador(x, y) {
       const scene = this.scene;
+
+      this.crearAnimaciones();
   
       this.player = scene.physics.add.sprite(
         x,
@@ -25,7 +53,7 @@ export default class BaseControl {
         .setCollideWorldBounds(false);
   
       this.player.body.setSize(14, 14);
-      this.player.setDepth(y);
+      this.player.setDepth(y + 50);
   
       this.keys = scene.input.keyboard.addKeys({
         up: Phaser.Input.Keyboard.KeyCodes.W,
@@ -81,7 +109,7 @@ export default class BaseControl {
       this.actualizarAnimacion(moving);
   
       // Profundidad aproximada según la posición vertical.
-      this.player.setDepth(this.player.y);
+      this.player.setDepth(this.player.y + 50);
     }
   
     actualizarAnimacion(moving) {
