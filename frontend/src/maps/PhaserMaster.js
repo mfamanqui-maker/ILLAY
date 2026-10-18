@@ -69,9 +69,17 @@ export default class PhaserMaster extends Phaser.Scene {
     this.aldea.montar();
     this.enAldea = false;
     this.puntoRetorno = null;
+
+    // Tecla ENTER para la interacción con las aldeas
     this.teclaEntrar = this.input.keyboard.addKey(
       Phaser.Input.Keyboard.KeyCodes.ENTER
     );
+
+    // Sistema de Pausa con ESC (Código rescatado de tu amigo)
+    this.input.keyboard.on('keydown-ESC', this.abrirMenuPausa, this);
+    this.events.once('shutdown', () => {
+      this.input.keyboard.off('keydown-ESC', this.abrirMenuPausa, this);
+    });
 
     const spawn = this.aldea.punto("inicio", 9);
     this.jugador = this.control.crearJugador(spawn.x, spawn.y);
@@ -86,6 +94,19 @@ export default class PhaserMaster extends Phaser.Scene {
     );
 
     this.entrarAldea("suroeste", true);
+  }
+
+  // Método de menú de pausa con ESC rescatado e integrado
+  abrirMenuPausa(event) {
+    if (event?.repeat) return;
+
+    this.scene.pause();
+    this.scene.launch('iuDeMapa', {
+      map: this.administradorMapas.obtenerExtensionMundo().mapa,
+      player: this.jugador || this.player,
+      interactions: this.interaccionesMapa || [],
+      worldSceneKey: this.scene.key
+    });
   }
 
   update() {

@@ -403,15 +403,15 @@ async regresarAlMapaAnterior(puntoSalida) {
   }
 
   obtenerCapaTronco() {
-    const capa = this.forest?.capaTronco;
+    const capas = this.forest?.capasTronco;
 
-    if (!capa) {
+    if (!capas?.length) {
       throw new Error(
         "[Mapas] Primero debes pintar el terreno."
       );
     }
 
-    return capa;
+    return capas;
   }
 
   fijarTerrenoVisible(visible) {
@@ -422,6 +422,7 @@ async regresarAlMapaAnterior(puntoSalida) {
     forest.capaDecorado?.setVisible(visible);
     forest.capaTronco?.setVisible(visible);
     forest.capaCopa?.setVisible(visible);
+    for (const capa of forest.capasDelante ?? []) capa.setVisible(visible);
   }
 
   aldeaPegada(tx, ty) {
@@ -494,7 +495,8 @@ async regresarAlMapaAnterior(puntoSalida) {
 
     return {
       ancho: mapa.widthInPixels,
-      alto: mapa.heightInPixels
+      alto: mapa.heightInPixels,
+      mapa: mapa
     };
   }
 }

@@ -111,6 +111,8 @@ export default class Forest {
     this.capaDecorado = null;
     this.capaTronco = null;
     this.capaCopa = null;
+    this.capasTronco = [];
+    this.capasDelante = [];
     this.suelo = [];
     this.decorado = [];
     this.tronco = [];
@@ -721,6 +723,12 @@ export default class Forest {
   plantarArboles() {
     const centroX = this.puntoInicio.x;
     const centroY = this.puntoInicio.y;
+    const falso = () => Array.from({ length: this.alto }, () => Array(this.ancho).fill(false));
+
+    this.troncoPuesto = falso();
+    this.tocado = Array.from({ length: this.alto }, () => Array(this.ancho).fill(-1));
+    this.arboles = [];
+    this.delante = [];
     let plantados = 0;
 
     for (let y = 3; y < this.alto; y += 8) {
@@ -732,14 +740,17 @@ export default class Forest {
         const oy = y + Math.floor(this.ruido(x + 8, y, this.semilla) * 3) - 1;
         if (!this.cabeArbol(ox, oy, centroX, centroY)) continue;
 
-        this.estamparPiezas(this.decorado, ox, oy, SOMBRA, true);
-        this.estamparPiezas(this.tronco, ox, oy, TRONCO, false);
-        this.estamparPiezas(this.copa, ox, oy, COPA, false);
+        const nivel = this.nivelDeArbol(ox, oy);
+        this.colocarArbol(ox, oy, nivel);
+        this.marcarArbol(ox, oy, this.arboles.length);
+        this.arboles.push({ nivel });
         plantados++;
       }
     }
 
-    console.log(`[Forest] Árboles plantados: ${plantados}`);
+    const encima = this.arboles.filter(arbol => arbol.nivel > 0).length;
+    const maximo = this.arboles.reduce((alto, arbol) => Math.max(alto, arbol.nivel), 0);
+    console.log(`[Forest] Árboles plantados: ${plantados}. Por delante: ${encima}. Niveles: ${maximo}`);
   }
 
   cabeArbol(x, y, centroX, centroY) {
@@ -747,12 +758,71 @@ export default class Forest {
       const tx = x + dx;
       const ty = y + dy;
       if (tx < 0 || ty < 0 || tx >= this.ancho || ty >= this.alto) return false;
-      if (this.tronco[ty][tx] !== -1) return false;
+      if (this.troncoPuesto[ty][tx]) return false;
       if (this.agujero[ty][tx] || this.camino[ty][tx] || this.rio[ty][tx]) return false;
       if (Math.abs(tx - centroX) <= 5 && Math.abs(ty - centroY) <= 5) return false;
     }
 
     return true;
+  }
+
+  // El árbol nuevo queda justo por encima del más alto que toca.
+  nivelDeArbol(x, y) {
+    let maximo = -1;
+
+    for (const piezas of [SOMBRA, TRONCO, COPA]) {
+      for (const [dx, dy] of piezas) {
+        const tx = x + dx;
+        const ty = y + dy;
+        if (tx < 0 || ty < 0 || tx >= this.ancho || ty >= this.alto) continue;
+        const indice = this.tocado[ty][tx];
+        if (indice < 0) continue;
+        if (this.arboles[indice].nivel > maximo) maximo = this.arboles[indice].nivel;
+      }
+    }
+
+    return maximo + 1;
+  }
+
+  colocarArbol(x, y, nivel) {
+    if (nivel === 0) {
+      this.estamparPiezas(this.decorado, x, y, SOMBRA, true);
+      this.estamparPiezas(this.tronco, x, y, TRONCO, false);
+      this.estamparPiezas(this.copa, x, y, COPA, false);
+    } else {
+      const extra = { nivel, sombra: [], tronco: [], copa: [] };
+      this.anotarPiezas(extra.sombra, x, y, SOMBRA);
+      this.anotarPiezas(extra.tronco, x, y, TRONCO);
+      this.anotarPiezas(extra.copa, x, y, COPA);
+      this.delante.push(extra);
+    }
+
+    for (const [dx, dy] of TRONCO) {
+      const tx = x + dx;
+      const ty = y + dy;
+      if (tx < 0 || ty < 0 || tx >= this.ancho || ty >= this.alto) continue;
+      this.troncoPuesto[ty][tx] = true;
+    }
+  }
+
+  anotarPiezas(lista, x, y, piezas) {
+    for (const [dx, dy, id] of piezas) {
+      const tx = x + dx;
+      const ty = y + dy;
+      if (tx < 0 || ty < 0 || tx >= this.ancho || ty >= this.alto) continue;
+      lista.push({ x: tx, y: ty, id });
+    }
+  }
+
+  marcarArbol(x, y, indice) {
+    for (const piezas of [SOMBRA, TRONCO, COPA]) {
+      for (const [dx, dy] of piezas) {
+        const tx = x + dx;
+        const ty = y + dy;
+        if (tx < 0 || ty < 0 || tx >= this.ancho || ty >= this.alto) continue;
+        this.tocado[ty][tx] = indice;
+      }
+    }
   }
 
   estamparPiezas(matriz, x, y, piezas, reemplazar = false) {
@@ -812,6 +882,9 @@ export default class Forest {
 
     this.capaTronco.setCollisionByExclusion([-1]);
     this.capaSuelo.setCollision(this.solidosAgua);
+    this.capasTronco = [this.capaTronco];
+    this.capasDelante = [];
+    this.pintarArbolesDelante(arboles);
 
     console.log("[Forest] Capas pintadas.");
     return this.capaSuelo;
@@ -834,6 +907,76 @@ export default class Forest {
         const indice = desfase && id > 400 ? id + desfase : id;
         capa.putTileAt(indice, x, y);
       }
+    }
+
+    capa.setDepth(profundidad);
+    return capa;
+  }
+
+  // Cada árbol que toca a otro lleva sus tres capas un paso por delante.
+  pintarArbolesDelante(tileset) {
+    const tile = RECURSOS_TERRENO.tile;
+
+    this.delante.forEach((extra, indice) => {
+      const sombra = this.crearCapaParcial(
+        `sombra-${indice}`,
+        tileset,
+        extra.sombra,
+        1 + extra.nivel * 0.001,
+        tile
+      );
+      const tronco = this.crearCapaParcial(
+        `tronco-${indice}`,
+        tileset,
+        extra.tronco,
+        2 + extra.nivel * 0.001,
+        tile
+      );
+      const copa = this.crearCapaParcial(
+        `copa-${indice}`,
+        tileset,
+        extra.copa,
+        PROFUNDIDAD_COPA + extra.nivel,
+        tile
+      );
+
+      if (sombra) this.capasDelante.push(sombra);
+      if (tronco) {
+        tronco.setCollisionByExclusion([-1]);
+        this.capasTronco.push(tronco);
+        this.capasDelante.push(tronco);
+      }
+      if (copa) this.capasDelante.push(copa);
+    });
+  }
+
+  crearCapaParcial(nombre, tileset, piezas, profundidad, tile) {
+    if (!piezas.length) return null;
+
+    let minX = piezas[0].x;
+    let minY = piezas[0].y;
+    let maxX = piezas[0].x;
+    let maxY = piezas[0].y;
+
+    for (const pieza of piezas) {
+      if (pieza.x < minX) minX = pieza.x;
+      if (pieza.y < minY) minY = pieza.y;
+      if (pieza.x > maxX) maxX = pieza.x;
+      if (pieza.y > maxY) maxY = pieza.y;
+    }
+
+    const capa = this.mapa.createBlankLayer(
+      nombre,
+      tileset,
+      minX * tile,
+      minY * tile,
+      maxX - minX + 1,
+      maxY - minY + 1
+    );
+
+    for (const pieza of piezas) {
+      const indice = pieza.id > 400 ? pieza.id + DESFASE_ARBOLES : pieza.id;
+      capa.putTileAt(indice, pieza.x - minX, pieza.y - minY);
     }
 
     capa.setDepth(profundidad);

@@ -2,6 +2,7 @@ import MenuScene from './MenuScene.js';
 import PhaserMaster from './maps/PhaserMaster.js';
 import CharacterSelectScene from './battle/vestibulo/characterSelectScene.js';
 import vista from './battle/vista.js';
+import iuDeMapa from './system/iuDeMapa.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -24,6 +25,7 @@ const config = {
   scene: [
 
     MenuScene,
+    iuDeMapa,
 
     //══════════════════Escenas de Mapas══════════════════
 
