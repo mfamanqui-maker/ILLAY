@@ -1,10 +1,16 @@
 // Contexto: este es un archibo ayudante con la logica de la coneccion del servidor
 
-const TIEMPO_MAXIMO_POR_DEFECTO = 30000;
+const TIEMPO_MAXIMO_POR_DEFECTO = 300000;
 
 let socket = null;
 const buzon = [];
 const esperas = [];
+const suscriptoresPartida = new Set();
+
+const MENSAJES_DIRECTOS = new Set([
+    'Preguntar_Rival_Vivo',
+    'Rival_Vivo_Confirmado',
+]);
 
 /**
  * Sobre del protocolo: type dice que es, data es la carga.
@@ -109,8 +115,21 @@ function alMensaje(message) {
         espera.reject(error);
         return;
     }
+    if (MENSAJES_DIRECTOS.has(recibido.type)) {
+        notificarEventoPartida(recibido);
+        return;
+    }
     buzon.push(recibido);
     entregarDelBuzon();
+    if (recibido.type === 'Resultado_Partida') notificarEventoPartida(recibido);
+}
+
+function notificarEventoPartida(recibido) {
+    suscriptoresPartida.forEach((suscriptor) => {
+        try { suscriptor(recibido); } catch (error) {
+            console.error('[coneccion] evento de partida:', error);
+        }
+    });
 }
 
 function entregarDelBuzon() {
@@ -193,6 +212,12 @@ export function vaciarBuzonDeConfigs() {
     }
 }
 
+export function descartarResultadosPartida() {
+    for (let i = buzon.length - 1; i >= 0; i -= 1) {
+        if (buzon[i]?.type === 'Resultado_Partida') buzon.splice(i, 1);
+    }
+}
+
 export function cancelarEsperas(tipos) {
     const lista = Array.isArray(tipos) ? tipos : [tipos];
     for (let i = esperas.length - 1; i >= 0; i -= 1) {
@@ -204,6 +229,12 @@ export function cancelarEsperas(tipos) {
     }
 }
 
+export function suscribirEventosPartida(suscriptor) {
+    if (typeof suscriptor !== 'function') return () => {};
+    suscriptoresPartida.add(suscriptor);
+    return () => suscriptoresPartida.delete(suscriptor);
+}
+
 /*
     Cierra si hay socket. Sin guarda, socket.close() revienta con TypeError.
 */
@@ -213,6 +244,7 @@ export function cerrarConeccion() {
     socket.close();
     buzon.length = 0;
     esperas.length = 0;
+    suscriptoresPartida.clear();
 }
 
 /** El negociador pregunta esto, no el readyState del socket. */
@@ -238,30 +270,114 @@ export function enviarConfigAccionesFinal(configuracion) {
     enviarMensaje(sobre('Enviar_Config_Acciones_Final', configuracion));
 }
 
+export function preguntarRivalVivo() {
+    enviarMensaje(sobre('Preguntar_Rival_Vivo', null));
+}
+
+export function responderRivalVivo(id) {
+    enviarMensaje(sobre('Responder_Rival_Vivo', { id }));
+}
+
+function sobreDeJugada(configuracion, {
+    modificable = true,
+    ronda = 1,
+    solicitudId = null,
+    bloquearRival = false,
+} = {}) {
+    return {
+        configuracion,
+        modificable: modificable === true,
+        ronda: Number(ronda) || 1,
+        ...(solicitudId ? { solicitudId } : {}),
+        ...(bloquearRival ? { bloquearRival: true } : {}),
+    };
+}
+
+function normalizarJugadaRecibida(data) {
+    if (Array.isArray(data)) {
+        return {
+            configuracion: data,
+            modificable: true,
+            propiaModificable: true,
+            ronda: null,
+        };
+    }
+    return {
+        configuracion: Array.isArray(data?.configuracion) ? data.configuracion : [],
+        modificable: data?.modificable === true,
+        propiaModificable: data?.propiaModificable !== false,
+        ronda: Number.isFinite(Number(data?.ronda)) ? Number(data.ronda) : null,
+    };
+}
+
 /** Delegado de PhaserMaster._enviarConfiguracion: esFinal elige el type. */
-export function enviarConfiguracion(configuracion, esFinal) {
+export function enviarConfiguracion(configuracion, esFinal, opciones = {}) {
+    const jugada = sobreDeJugada(configuracion, opciones);
     if (esFinal) {
-        enviarConfigAccionesFinal(configuracion);
+        enviarConfigAccionesFinal(jugada);
         return;
     }
-    enviarConfigAcciones(configuracion);
+    enviarConfigAcciones(jugada);
 }
 
 /**
  * Escucha al rival sin asumir que ya cerro. Resultado_Partida entra para
  * que una pestana cerrada no deje esta promesa abierta.
  */
-export async function recibirConfigDelRival(tiempoMaximo) {
-    const respuesta = await esperar([
-        'Recibir_Config_Acciones',
-        'Recibir_Config_Acciones_Final',
-        'Resultado_Partida',
-    ], tiempoMaximo);
-    return {
-        type: respuesta.type,
-        data: respuesta.data,
-        esFinal: respuesta.type === 'Recibir_Config_Acciones_Final',
-    };
+export async function recibirConfigDelRival(tiempoMaximo, {
+    ronda = null,
+    requiereInvariable = false,
+} = {}) {
+    const inicio = Date.now();
+    while (true) {
+        const restante = Number.isFinite(Number(tiempoMaximo))
+            ? Math.max(1, Number(tiempoMaximo) - (Date.now() - inicio))
+            : tiempoMaximo;
+        const respuesta = await esperar([
+            'Recibir_Config_Acciones',
+            'Recibir_Config_Acciones_Final',
+            'Resultado_Partida',
+        ], restante);
+        if (respuesta.type === 'Resultado_Partida') {
+            return { type: respuesta.type, data: respuesta.data, esFinal: false };
+        }
+        const jugada = normalizarJugadaRecibida(respuesta.data);
+        if (ronda != null && jugada.ronda != null && Number(ronda) !== jugada.ronda) continue;
+        if (requiereInvariable && jugada.modificable) continue;
+        return {
+            type: respuesta.type,
+            data: jugada.configuracion,
+            esFinal: respuesta.type === 'Recibir_Config_Acciones_Final',
+            modificable: jugada.modificable,
+            propiaModificable: jugada.propiaModificable,
+            ronda: jugada.ronda,
+        };
+    }
+}
+
+function idSolicitudCambio() {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    return `cambio-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+/** El servidor arbitra la carrera entre retractarse y el bloqueo del rival. */
+export async function solicitarCambioConfiguracion({ ronda = 1, tiempoMaximo } = {}) {
+    const solicitudId = idSolicitudCambio();
+    const inicio = Date.now();
+    let pendiente = esperar('Estado_Config_Acciones', tiempoMaximo);
+    enviarConfigAcciones(sobreDeJugada('cambiante', {
+        modificable: true,
+        ronda,
+        solicitudId,
+    }));
+    while (true) {
+        const respuesta = await pendiente;
+        if (respuesta?.solicitudId === solicitudId) return respuesta;
+        const restante = Number.isFinite(Number(tiempoMaximo))
+            ? Math.max(1, Number(tiempoMaximo) - (Date.now() - inicio))
+            : tiempoMaximo;
+        pendiente = esperar('Estado_Config_Acciones', restante);
+    }
 }
 
 export function enviarPartidaFinalizada(resultado) {
@@ -280,9 +396,15 @@ export const transporte = {
     esperarPartida,
     enviarConfigAcciones,
     enviarConfigAccionesFinal,
+    preguntarRivalVivo,
+    responderRivalVivo,
     enviarConfiguracion,
     recibirConfigDelRival,
+    solicitarCambioConfiguracion,
+    cancelarEsperas,
+    suscribirEventosPartida,
     vaciarBuzonDeConfigs,
+    descartarResultadosPartida,
     enviarPartidaFinalizada,
     esperarResultadoPartida,
     cerrarConeccion,

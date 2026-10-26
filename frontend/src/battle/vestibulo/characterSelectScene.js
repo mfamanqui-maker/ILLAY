@@ -22,24 +22,38 @@ export default class CharacterSelectScene extends Phaser.Scene {
         const tablero = new TableroColocacion(this);
         const aliados = new BotonesAliados(this);
         this.overlay = new OverlayEmpareje(this);
-        this.crearBotonConfirmar(aliados.allyButtons, tablero.position);
+        this.crearBotonesInferiores(aliados.allyButtons, tablero.position);
     }
 
-    crearBotonConfirmar(personajes, posiciones) {
+    crearBotonesInferiores(personajes, posiciones) {
         const x = 530;
         const y = 800;
-        this.botonTexto = this.add.text(x, y, 'Iniciar Batalla', {
+        this.botonIniciar = this.add.text(x + 250, y, 'Iniciar Batalla', {
             fontFamily: 'impact',
-            fontSize: '32px',
+            fontSize: '28px',
             color: '#FFFFFF',
         }).setOrigin(0.5);
-        this.botonConfirmar = this.add.rectangle(x, y, 500, 100, 0x2746F5)
+        this.botonIniciar = this.add.rectangle(x + 250, y, 300, 100, 0x2746F5)
             .setOrigin(0.5)
             .setInteractive({ useHandCursor: true })
             .setAlpha(0.5);
-        this.botonConfirmar.on('pointerdown', async () => {
-            this.botonConfirmar.disableInteractive();
+        this.botonIniciar.on('pointerdown', async () => {
+            this.botonIniciar.disableInteractive();
             await this.buscarYEntrar(personajes, posiciones);
+        });
+
+        this.botonSalir = this.add.text(x - 250, y, 'Salir', {
+            fontFamily: 'impact',
+            fontSize: '28px',
+            color: '#FFFFFF',
+        }).setOrigin(0.5);
+
+        this.botonSalir = this.add.rectangle(x - 250, y, 300, 100, 0x2746F5)
+            .setOrigin(0.5)
+            .setInteractive({ useHandCursor: true })
+            .setAlpha(0.5);
+        this.botonSalir.on('pointerdown', async () => {
+            this.scene.start('menu');
         });
     }
 

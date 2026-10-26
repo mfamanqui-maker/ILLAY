@@ -1,7 +1,7 @@
 /**
  * Mitad izquierda del lado derecho del panel.
  * Una sola lista con scroll que encadena las categorías a todo el ancho:
- *   ESTADISTICAS GENERALES  ▶  EFECTOS
+ *   ESTADÍSTICAS  ▶  EFECTOS
  *
  * Cada hover sobre un item llama tooltip.mostrar(claveJson, item.nombre).
  */
@@ -19,7 +19,7 @@ export function crearSeccionEstadisticasEfectos(scene, opciones) {
     padre,
     tooltip,
     grupos: [
-      { titulo: 'ESTADISTICAS', clave: 'estadisticas', items: datos?.estadisticas ?? [] },
+      { titulo: 'ESTADÍSTICAS', clave: 'estadisticas', items: datos?.estadisticas ?? [] },
       { titulo: 'EFECTOS', clave: 'efectos', items: datos?.efectos ?? [] },
     ],
   });

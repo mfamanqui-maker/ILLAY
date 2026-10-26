@@ -8,7 +8,6 @@
  */
 
 import { anulaPorGolpe } from '../../datosDePotestades/acciones/catalogo.js';
-import { costeDeAccion, ganarAccionismoExtra, gastarFichas } from '../../datosDePotestades/acciones/diana.js';
 import { abrirFaseEscudo } from '../../faseEscudo.js';
 import { afectadosPorRayo } from '../../tablero/UtilsTablero.js';
 import { buscarAccion, entradaDe, filasDeConfig, listaDe } from '../comun.js';
@@ -40,25 +39,49 @@ function normalizarFilas(data) {
   return [];
 }
 
+function opcionesDeEnvio(ctx, extras = {}) {
+  const modificable = ctx.obtenerModificable?.() ?? ctx.modificable ?? true;
+  return {
+    ronda: ctx.ronda ?? 1,
+    modificable,
+    ...extras,
+  };
+}
+
+function aplicarEstadoRecibido(recibido, ctx) {
+  if (recibido?.propiaModificable === false) {
+    ctx.actualizarModificable?.(false);
+  }
+}
+
 /**
  * Confirma la config del turno. Sin socket: _Final local y precombate.
  * Con socket: escucha ANTES de enviar (evita perder un Recibir temprano).
  * Tras recibir al rival se recalcula si ya no hace falta mas datos.
  */
-export async function negociar(configDelTurno, { transporte, columnas, registro, haySocket, configuracionRival = null }) {
+export async function negociar(configDelTurno, contexto = {}) {
+  const {
+    transporte, columnas, registro, haySocket,
+    configuracionRival = null, tiempoDeReflexion, ronda,
+  } = contexto;
   const propia = filasDeConfig(configDelTurno);
 
   if (!haySocket) return { fase: 'precombate', propia, rival: [] };
 
-  let pendiente = transporte.recibirConfigDelRival();
+  let pendiente = transporte.recibirConfigDelRival(tiempoDeReflexion, { ronda });
   let final = esConfigFinal(propia, registro, configuracionRival);
-  transporte.enviarConfiguracion(espejarConfig(propia, columnas), final);
+  transporte.enviarConfiguracion(
+    espejarConfig(propia, columnas),
+    final,
+    opcionesDeEnvio(contexto),
+  );
 
   while (true) {
     const recibido = await pendiente;
     if (recibido.type === 'Resultado_Partida') {
       return { fase: 'terminada', resultado: recibido.data };
     }
+    aplicarEstadoRecibido(recibido, contexto);
 
     const rival = normalizarFilas(recibido.data);
     final = esConfigFinal(propia, registro, rival);
@@ -67,8 +90,12 @@ export async function negociar(configDelTurno, { transporte, columnas, registro,
       return { fase: 'precombate', propia, rival };
     }
     if (final && !recibido.esFinal) {
-      transporte.enviarConfiguracion(espejarConfig(propia, columnas), true);
-      pendiente = transporte.recibirConfigDelRival();
+      transporte.enviarConfiguracion(
+        espejarConfig(propia, columnas),
+        true,
+        opcionesDeEnvio(contexto),
+      );
+      pendiente = transporte.recibirConfigDelRival(tiempoDeReflexion, { ronda });
       continue;
     }
     return {
@@ -80,13 +107,40 @@ export async function negociar(configDelTurno, { transporte, columnas, registro,
   }
 }
 
+/** Deshace el envio: deja de esperar y avisa al rival que aun no cerramos. */
+export async function retractarConfiguracion(_configDelTurno, {
+  transporte, haySocket, ronda, tiempoDeReflexion,
+} = {}) {
+  if (!haySocket || !transporte?.solicitarCambioConfiguracion) {
+    return { aceptada: true, modificable: true };
+  }
+  const resultado = await transporte.solicitarCambioConfiguracion({
+    ronda,
+    tiempoMaximo: tiempoDeReflexion,
+  });
+  if (resultado?.aceptada) {
+    transporte.cancelarEsperas?.([
+      'Recibir_Config_Acciones',
+      'Recibir_Config_Acciones_Final',
+    ]);
+  }
+  return resultado;
+}
+
+export function esEsperaCancelada(error) {
+  return String(error?.message ?? '').includes('espera cancelada');
+}
+
 /**
  * Si hay escudo, pide la config del rival.
  * Escucha ANTES de enviar: si el rival ya confirmo, su mensaje esta en el buzon
  * y el sigue bloqueado hasta que reciba la nuestra.
  * Si nosotros acabamos primero, el envio no-final lo despierta cuando confirme.
  */
-export async function buscarInformacionDeRival(configDelTurno, { transporte, columnas, haySocket } = {}) {
+export async function buscarInformacionDeRival(configDelTurno, contexto = {}) {
+  const {
+    transporte, columnas, haySocket, tiempoDeReflexion, ronda,
+  } = contexto;
   if (!haySocket || !transporte?.recibirConfigDelRival) return null;
   let pideInfo = false;
   for (const [, filas] of configDelTurno) {
@@ -97,12 +151,20 @@ export async function buscarInformacionDeRival(configDelTurno, { transporte, col
     }
   }
   if (!pideInfo) return null;
-  const pendiente = transporte.recibirConfigDelRival();
-  transporte.enviarConfiguracion(espejarConfig(filasDeConfig(configDelTurno), columnas), false);
+  const pendiente = transporte.recibirConfigDelRival(tiempoDeReflexion, {
+    ronda,
+    requiereInvariable: true,
+  });
+  transporte.enviarConfiguracion(
+    espejarConfig(filasDeConfig(configDelTurno), columnas),
+    false,
+    opcionesDeEnvio(contexto, { bloquearRival: true }),
+  );
   const recibido = await pendiente;
   if (recibido.type === 'Resultado_Partida') {
     return { fase: 'terminada', resultado: recibido.data };
   }
+  aplicarEstadoRecibido(recibido, contexto);
   return { rival: normalizarFilas(recibido.data), esFinal: recibido.esFinal === true };
 }
 
@@ -217,22 +279,12 @@ function casoEmpateEscudos(ctx) {
 
 function aplicarSeleccionEscudo(ctx, resultado) {
   const asignaciones = resultado?.asignaciones ?? [];
-  const registro = ctx.escena?.registro;
   const pool = [...ctx.integrantes.defensores];
   asignaciones.forEach((asig) => {
     const fila = pool.find((d) => String(d.id) === String(asig.defensorId) && d.objetivo == null);
     if (fila) fila.objetivo = asig.objetivo;
   });
   ctx.propia = (ctx.propia ?? []).filter((f) => f.nombreDeAccion !== 'escudar' || f.objetivo != null);
-
-  asignaciones.forEach((asig) => {
-    const defensor = entradaDe(registro, asig.defensorId)?.potestad;
-    const protegido = entradaDe(registro, asig.objetivo)?.potestad;
-    if (!defensor || !protegido) return;
-    if (!gastarFichas(defensor, costeDeAccion(null, 'escudar'))) return;
-    ganarAccionismoExtra(defensor, 1);
-    protegido.activacionEscudo = true;
-  });
 
   ctx.rival = resolverLado(ctx.rival, ctx.ataquesHaciaEnemigos);
 }

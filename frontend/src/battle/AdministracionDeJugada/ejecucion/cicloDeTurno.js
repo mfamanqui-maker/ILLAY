@@ -21,6 +21,7 @@ import { asegurarEscudarEnPropia } from '../comun.js';
 import { utilsType1 } from '../negociacion/negociadorDeRonda.js';
 
 export function ctxRonda(escena) {
+  const tiempo = Number(escena.configuracion?.reglasExtra?.tiempoDeReflexion);
   return {
     transporte: escena.transporte,
     columnas: escena.configuracion?.configTablero?.columnas,
@@ -28,6 +29,11 @@ export function ctxRonda(escena) {
     haySocket: escena.transporte.estaConectado(),
     configuracionRival: escena.configRival,
     tablero: escena.tablero,
+    tiempoDeReflexion: Number.isFinite(tiempo) && tiempo > 0 ? tiempo : 300000,
+    ronda: escena._rondaRed ?? 1,
+    modificable: escena._configModificable !== false,
+    obtenerModificable: () => escena._configModificable !== false,
+    actualizarModificable: (valor) => escena._fijarConfigModificable?.(valor),
   };
 }
 
@@ -71,6 +77,8 @@ export function limpiarTrasTurno(escena) {
   escena.configRival = null;
   if (escena.orbesSistema) escena.orbesSistema.configuracionRival = null;
   escena.idsPendientes = null;
+  escena._rondaRed = Number(escena._rondaRed ?? 1) + 1;
+  escena._fijarConfigModificable?.(true);
   escena.transporte?.vaciarBuzonDeConfigs?.();
 }
 

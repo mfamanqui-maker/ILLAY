@@ -44,6 +44,8 @@ export default class PhaserMaster extends Phaser.Scene {
     await this.carga.mostrarCargados();
     await this.carga.transicion();
     this.listo = true;
+    this.scene.launch("uiMapa");
+    this.scene.bringToTop("uiMapa");
 
     console.log(
       "[Illay] Mundo preparado:",
@@ -93,20 +95,26 @@ export default class PhaserMaster extends Phaser.Scene {
       this.administradorMapas.obtenerCapaSuelo()
     );
 
-    this.entrarAldea("suroeste", true);
+    this.entrarAldea("inicio", true);
   }
 
   // Método de menú de pausa con ESC rescatado e integrado
   abrirMenuPausa(event) {
-    if (event?.repeat) return;
+    if (event?.repeat || !this.listo || !this.enAldea) return;
+
+    const mapa = this.aldea.mapaActivo();
+    if (!mapa) return;
 
     this.scene.pause();
     this.scene.launch('iuDeMapa', {
-      map: this.administradorMapas.obtenerExtensionMundo().mapa,
-      player: this.jugador || this.player,
+      map: mapa,
+      player: this.jugador,
       interactions: this.interaccionesMapa || [],
+      puntosBatalla: this.aldea.puntosBatalla(),
+      zonasInterior: this.aldea.zonasInterior(),
       worldSceneKey: this.scene.key
     });
+    this.scene.bringToTop('iuDeMapa');
   }
 
   update() {
@@ -115,7 +123,10 @@ export default class PhaserMaster extends Phaser.Scene {
     if (!Phaser.Input.Keyboard.JustDown(this.teclaEntrar)) return;
 
     if (this.enAldea) {
+      const zona = this.aldea.zonaInteriorCercana(this.jugador);
       if (this.aldea.encimaDeSalida(this.jugador)) this.salirAlBosque();
+      else if (zona) console.log(zona.mensaje);
+      else if (this.aldea.puntoBatallaCercano(this.jugador)) this.iniciarBatalla();
       return;
     }
 
@@ -124,6 +135,12 @@ export default class PhaserMaster extends Phaser.Scene {
     const ty = Math.floor(this.jugador.y / tile);
     const aldea = this.administradorMapas.aldeaPegada(tx, ty);
     if (aldea) this.entrarAldea(aldea.nombre);
+  }
+
+  iniciarBatalla() {
+    if (this.scene.isActive("iuDeMapa")) this.scene.stop("iuDeMapa");
+    if (this.scene.isActive("uiMapa")) this.scene.stop("uiMapa");
+    this.scene.start("vista", {});
   }
 
   entrarAldea(nombre, inicial = false) {

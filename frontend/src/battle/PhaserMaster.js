@@ -7,6 +7,7 @@ import { montar, precargar } from './tablero/index.js';
 import { aplicarAccionismoDelTurno, cupoAccionismo, iniciarBrilloAccionismo, liberarAccionismo, reiniciarAccionismo, restaurarBrillosAccionismo } from './seleccion/index.js';
 import { abrirPanel } from './panelEntidad/index.js';
 import { transporte } from './coneccion.js';
+import { respuestaDeIA } from './ia/respuestaDeIA.js';
 import {
   actualizarFantasmaMovilidad,
   conmutarPermanente,
@@ -19,11 +20,12 @@ import {
   registrarEleccion,
   resolverFinDeBatalla,
   buscarInformacionDeRival,
+  retractarConfiguracion,
+  esEsperaCancelada,
   asegurarEscudarEnPropia,
   filasDeConfig,
   utilsType1,
 } from './AdministracionDeJugada/index.js';
-import { abrirFaseEscudo } from './faseEscudo.js';
 
 export const CLAVE_ESCENA_MUNDO = 'BatallaMundo';
 
@@ -37,6 +39,8 @@ const RUTAS_DE_INPUT = {
   colaEliminar: '_alEliminarDeCola',
   colaPermanente: '_alMarcarPermanente',
   confirmar: '_alConfirmarJugada',
+  preguntarRivalVivo: '_alPreguntarRivalVivo',
+  responderRivalVivo: '_alResponderRivalVivo',
   rendirse: '_alRendirse',
 };
 
@@ -53,7 +57,10 @@ export default class PhaserMaster extends Phaser.Scene {
     this.configDelTurno = new Map();
     this.permanentes = new Map();
     this.configPropia = this.configRival = this.idsPendientes = null;
-    this._negociando = this._reconfirmarPendiente = this._batallaCerrada = false;
+    this._negociando = this._reconfirmarPendiente = this._retractando = this._batallaCerrada = false;
+    this._configModificable = true;
+    this._rondaRed = 1;
+    this._desuscribirEventosPartida = null;
     this._sesionTipo1 = null;
     this.estadoRonda = 'seleccionando';
   }
@@ -67,7 +74,14 @@ export default class PhaserMaster extends Phaser.Scene {
     await montar(this);
     registrarTurnoInicial(this.registroDeJugadas, this.registro);
     this._registrarInputs();
-    this.scene.launch(CLAVE_ESCENA_HUD, { eventos: this.eventos, obtenerRegistro: () => this.registroDeJugadas });
+    this._desuscribirEventosPartida = this.transporte.suscribirEventosPartida?.(
+      (mensaje) => this._alMensajeServidor(mensaje),
+    );
+    this.scene.launch(CLAVE_ESCENA_HUD, {
+      eventos: this.eventos,
+      obtenerRegistro: () => this.registroDeJugadas,
+      puedeComprobarRival: this.transporte.estaConectado(),
+    });
     this._cambiarFase('seleccionando');
   }
 
@@ -140,27 +154,102 @@ export default class PhaserMaster extends Phaser.Scene {
 
   _alCerrarPanel() {}
 
+  _alPreguntarRivalVivo() {
+    if (this.estadoRonda !== 'seleccionando' || !this.transporte.estaConectado()) return;
+    this.transporte.preguntarRivalVivo?.();
+  }
+
+  _alResponderRivalVivo({ id } = {}) {
+    if (id) this.transporte.responderRivalVivo?.(id);
+  }
+
+  _alMensajeServidor({ type, data } = {}) {
+    if (type === 'Preguntar_Rival_Vivo') {
+      this.eventos.emit('preguntaRivalVivo', data);
+      return;
+    }
+    if (type === 'Rival_Vivo_Confirmado') {
+      this.eventos.emit('rivalVivoConfirmado', data);
+      return;
+    }
+    if (type === 'Resultado_Partida') {
+      this.transporte.descartarResultadosPartida?.();
+      void this._terminarBatalla(data, true);
+    }
+  }
+
   async _alConfirmarJugada() {
-    if (this._negociando || this._sesionTipo1 || this.estadoRonda === 'ejecutando') return;
+    if (this._sesionTipo1 || this.estadoRonda === 'escudo' || this.estadoRonda === 'ejecutando') return;
+    if (this.estadoRonda === 'esperandoRival') {
+      await this._retractarConfirmacion();
+      return;
+    }
+    if (this._negociando) return;
+    if (!this.transporte?.estaConectado?.()) return this._confirmarSinConexion();
     this._cerrarOrbes();
     this._cambiarFase('esperandoRival');
-    const extra = await buscarInformacionDeRival(this.configDelTurno, ctxRonda(this));
-    if (extra?.fase === 'terminada') return this._terminarBatalla(extra.resultado, true);
-    if (extra?.rival) {
-      this._recibirConfiguracionRival(extra.rival);
-      this.configPropia = asegurarEscudarEnPropia(
-        this.configPropia ?? filasDeConfig(this.configDelTurno),
-        this.configDelTurno,
-      );
-      this._cambiarFase('escudo');
-      await utilsType1(this.configRival, this.configPropia, this.registro, this);
-      this._cambiarFase('esperandoRival');
+    try {
+      const extra = await buscarInformacionDeRival(this.configDelTurno, ctxRonda(this));
+      if (this.estadoRonda !== 'esperandoRival' && this.estadoRonda !== 'escudo') return;
+      if (extra?.fase === 'terminada') return this._terminarBatalla(extra.resultado, true);
+      if (extra?.rival) {
+        this._recibirConfiguracionRival(extra.rival);
+        this.configPropia = asegurarEscudarEnPropia(
+          this.configPropia ?? filasDeConfig(this.configDelTurno),
+          this.configDelTurno,
+        );
+        this._cambiarFase('escudo');
+        await utilsType1(this.configRival, this.configPropia, this.registro, this);
+        if (this.estadoRonda !== 'escudo' && this.estadoRonda !== 'esperandoRival') return;
+        this._cambiarFase('esperandoRival');
+      }
+      await this._negociarUnaVez();
+    } catch (error) {
+      if (esEsperaCancelada(error) || this._retractando) return;
+      console.error('[PhaserMaster] confirmar:', error);
+      this._cambiarFase('seleccionando');
     }
-    await this._negociarUnaVez();
     if (this._reconfirmarPendiente) {
       this._reconfirmarPendiente = false;
       await this._alConfirmarJugada();
     }
+  }
+
+  async _confirmarSinConexion() {
+    this._cerrarOrbes();
+    this.configPropia = asegurarEscudarEnPropia(
+      filasDeConfig(this.configDelTurno),
+      this.configDelTurno,
+    );
+    this._recibirConfiguracionRival(respuestaDeIA(this));
+    this._cambiarFase('precombate');
+    await precombate(this);
+    return this._ejecutarTurno();
+  }
+
+  async _retractarConfirmacion() {
+    if (this._retractando || this.estadoRonda !== 'esperandoRival') return;
+    if (!this._configModificable) return;
+    this._retractando = true;
+    try {
+      const resultado = await retractarConfiguracion(this.configDelTurno, ctxRonda(this));
+      this._fijarConfigModificable(resultado?.modificable === true);
+      if (!resultado?.aceptada || this.estadoRonda !== 'esperandoRival') return;
+      this.configPropia = null;
+      this.configRival = null;
+      if (this.orbesSistema) this.orbesSistema.configuracionRival = null;
+      this.estadoRonda = 'seleccionando';
+      this.eventos.emit('faseCambiada', 'seleccionando');
+    } catch (error) {
+      if (!esEsperaCancelada(error)) console.error('[PhaserMaster] retractar:', error);
+    } finally {
+      this._retractando = false;
+    }
+  }
+
+  _fijarConfigModificable(valor) {
+    this._configModificable = valor === true;
+    this.eventos?.emit('configModificableCambiada', this._configModificable);
   }
 
   async _negociarUnaVez() {
@@ -168,6 +257,7 @@ export default class PhaserMaster extends Phaser.Scene {
     try {
       await this._aplicarResultadoRonda(await negociar(this.configDelTurno, ctxRonda(this)));
     } catch (error) {
+      if (esEsperaCancelada(error) || this._retractando) return;
       console.error('[PhaserMaster] negociar:', error);
       this._cambiarFase('seleccionando');
     } finally {
@@ -239,6 +329,8 @@ export default class PhaserMaster extends Phaser.Scene {
 
   shutdown() {
     this._cerrarFaseEscudo?.();
+    this._desuscribirEventosPartida?.();
+    this._desuscribirEventosPartida = null;
     this._cerrarOrbes();
     this._desregistrarInputs();
     this.administrador?.destruir();

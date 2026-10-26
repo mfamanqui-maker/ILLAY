@@ -12,7 +12,7 @@
     "Enemigos": []
   },
   "reglasExtra": {
-    "tiempoDeReflexion": 100000,
+    "tiempoDeReflexion": 300000,
     "condicionesVictoriaExtra": "eliminar al equipo contrario",
     "clima": "soleado",
     "retiradas": true,

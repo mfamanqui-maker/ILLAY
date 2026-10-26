@@ -23,7 +23,7 @@ export class ElementosFijos {
             strokeThickness: 10,
         }).setOrigin(0.5);
 
-        this.escena.add.text(1640, 850, 'Pociona tus tropas en el tablero antes de iniciar', {
+        this.escena.add.text(1640, 850, 'Posiciona tus tropas en el tablero antes de iniciar', {
             fontFamily: 'impact',
             fontSize: '32px',
             color: '#2C3C91',

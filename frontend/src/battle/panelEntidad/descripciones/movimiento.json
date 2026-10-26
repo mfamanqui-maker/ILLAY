@@ -1,7 +1,7 @@
 {
     "MOVERSE": "La potestad se mueve a la casilla seleccionada. velocidad: 100",
-    "MOVILIDAD RAPIDA": "La potestad se mueve rapido a la casilla seleccionada. velocidad: 100",
+    "MOVILIDAD RAPIDA": "La potestad se mueve rápido a la casilla seleccionada. velocidad: 100",
     "MOVILIDAD LENTA": "La potestad se mueve lento a la casilla seleccionada. velocidad: 0",
-    "PONER TRAMPA": "Coloca una trampa en una casilla. Cuando un enemigo pase por ella, la trampa explotará y le infligirá dano. velocidad: 100",
-    "DESCANSAR": "La potestad no hace nada este turno y el proximo turno obtiene un punto de accionismo extra. velocidad: 50"
+    "PONER TRAMPA": "Coloca una trampa en una casilla. Cuando un enemigo pase por ella, la trampa explotará y le infligirá daño. velocidad: 100",
+    "DESCANSAR": "La potestad no hace nada este turno y el próximo turno obtiene un punto de accionismo extra. velocidad: 50"
 }

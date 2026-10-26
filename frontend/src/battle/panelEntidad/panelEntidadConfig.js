@@ -56,7 +56,6 @@ export const PANEL = {
  */
 export const ASSETS = {
   fondo: { clave: 'panelFondo', archivo: 'assets/images/battle/panel/panel.png' },
-  fuente: { clave: 'panelText', archivo: 'assets/images/battle/panel/text.png' },
   barraLlena: { clave: 'panelBarraLlena', archivo: 'assets/images/battle/panel/barraDeVida.png' },
   barraVacia: { clave: 'panelBarraVacia', archivo: 'assets/images/battle/panel/Barra_de_vida2.png' },
   venda: { clave: 'panelVenda', archivo: 'assets/images/battle/panel/Next.png' },
@@ -121,7 +120,7 @@ export const LADO_IZQUIERDO = {
   tooltipPadding: 14,
   tooltipTextoEscala: 1.5,
   tooltipTextoEstilo: 'panel',
-  tooltipTitulo: 'PASA EL MOUSE SOBRE UNA CUALIDAD',
+  tooltipTitulo: 'Pasa el mouse sobre una cualidad',
   botonAlto: 44,
   botonGap: 10,
   botonTextoEscala: 1.5,
@@ -190,6 +189,31 @@ export function claveTexturaImagen(ruta) {
   return `panelEntidad_img_${String(ruta).replace(/[^a-zA-Z0-9]+/g, '_')}`;
 }
 
+/** Quita tildes y pasa a mayúsculas para buscar en los JSON. */
+function claveDescripcion(nombre) {
+  return String(nombre ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+}
+
+/**
+ * Nombres internos del combate (ASCII) → etiqueta visible del panel.
+ * El id de la acción/stat no cambia; solo se ve bien ñ y tildes.
+ */
+const ETIQUETAS_PANEL = {
+  dano: 'daño',
+  hpmax: 'hp máx',
+  maldicion: 'maldición',
+  'movilidad rapida': 'movilidad rápida',
+};
+
+export function etiquetaPanel(nombre) {
+  const crudo = String(nombre ?? '');
+  const clave = claveDescripcion(crudo).toLowerCase();
+  return ETIQUETAS_PANEL[clave] ?? crudo;
+}
+
 export function obtenerDescripcion(scene, clave, nombreItem) {
   const meta = DESCRIPCIONES[clave];
   if (!meta) return null;
@@ -197,6 +221,9 @@ export function obtenerDescripcion(scene, clave, nombreItem) {
   if (!cache?.exists(meta.clave)) return null;
   const tabla = cache.get(meta.clave);
   if (!tabla || typeof tabla !== 'object') return null;
-  const key = String(nombreItem ?? '').toUpperCase();
-  return tabla[key] ?? tabla[nombreItem] ?? null;
+  const key = claveDescripcion(nombreItem);
+  if (tabla[key] != null) return tabla[key];
+  if (tabla[nombreItem] != null) return tabla[nombreItem];
+  const hallada = Object.entries(tabla).find(([k]) => claveDescripcion(k) === key);
+  return hallada ? hallada[1] : null;
 }

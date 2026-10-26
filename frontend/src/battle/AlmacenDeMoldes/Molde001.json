@@ -11,18 +11,18 @@
   ],
   "equipos": {
     "Aliados": [
-      { "id": 1, "arquetipo": "lumel", "invetario": ["brebaje", "Trampa"], "nivel": 5, "posicion": { "x": 1, "y": 1 } },
-      { "id": 2, "arquetipo": "brunn", "invetario": [], "nivel": 3, "posicion": { "x": 2, "y": 3 } },
-      { "id": 3, "arquetipo": "lumel", "invetario": ["brebaje", "Trampa"], "nivel": 5, "posicion": { "x": 1, "y": 5 } }
+      { "id": 1, "arquetipo": "Campesino", "posicion": { "x": 1, "y": 1 } },
+      { "id": 2, "arquetipo": "Mago", "posicion": { "x": 2, "y": 3 } },
+      { "id": 3, "arquetipo": "Campesino", "posicion": { "x": 1, "y": 5 } }
     ],
     "Enemigos": [
-      { "id": 4, "arquetipo": "soldado1", "invetario": [], "nivel": 5, "posicion": { "x": 5, "y": 1 } },
-      { "id": 5, "arquetipo": "soldado1", "invetario": [], "nivel": 5, "posicion": { "x": 4, "y": 3 } },
-      { "id": 6, "arquetipo": "soldado1", "invetario": [], "nivel": 5, "posicion": { "x": 5, "y": 5 } }
+      { "id": 4, "arquetipo": "Realista", "posicion": { "x": 5, "y": 1 } },
+      { "id": 5, "arquetipo": "Mago", "posicion": { "x": 4, "y": 3 } },
+      { "id": 6, "arquetipo": "Campesino", "posicion": { "x": 5, "y": 5 } }
     ]
   },
   "reglasExtra": {
-    "tiempoDeReflexion": 100000,
+    "tiempoDeReflexion": 300000,
     "condicionesVictoriaExtra": "eliminar al equipo contrario",
     "clima": "soleado",
     "retiradas": true,

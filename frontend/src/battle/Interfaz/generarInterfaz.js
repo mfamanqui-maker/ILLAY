@@ -8,6 +8,7 @@ import {
 } from '../panelEntidad/index.js';
 import { precargarTodosLosTextos, registrarTodosLosFramesTexto } from '../panelEntidad/GenerarTexto/index.js';
 import { enlazarControlesInterfaz } from './enlazarControles.js';
+import { mostrarConfirmacionVida } from './confirmacionVida.js';
 import { mostrarEsperaRival, ocultarEsperaRival } from './indicadorEspera.js';
 import { mostrarFinalidad, precargarAssetsFinalidad } from '../finalidad.js';
 
@@ -19,6 +20,7 @@ const COLOR_RELLENO = 0x922b21;
 const COLOR_BARRA = 0x1a1a1a;
 const COLOR_RAYADO = 0xc0392b;
 const ALPHA_BOTON_BLOQUEADO = 0.35;
+const TIEMPO_HASTA_BOTON_VIDA = 120000;
 
 export default class GenerarInterfaz extends Phaser.Scene {
   constructor() {
@@ -31,14 +33,24 @@ export default class GenerarInterfaz extends Phaser.Scene {
     this._limpiarAtajos = null;
     this._desenlazarControles = null;
     this._onFaseCambiada = null;
+    this._onConfigModificable = null;
+    this._onPreguntaRivalVivo = null;
+    this._onRivalVivoConfirmado = null;
     this._onBatallaTerminada = null;
     this._avisoEmisorFaltante = false;
     this._bloqueadoPorEspera = false;
+    this._configModificable = true;
+    this._estadoRondaActual = 'seleccionando';
+    this._puedeComprobarRival = false;
+    this._consultaRivalPendiente = false;
+    this._temporizadorRivalVivo = null;
+    this._overlayRivalVivo = null;
   }
 
   init(datos) {
     this.eventos = datos?.eventos ?? this.sys?.settings?.data?.eventos ?? null;
     this.obtenerRegistro = datos?.obtenerRegistro ?? this.obtenerRegistro;
+    this._puedeComprobarRival = datos?.puedeComprobarRival === true;
   }
 
   preload() {
@@ -80,9 +92,10 @@ export default class GenerarInterfaz extends Phaser.Scene {
     const bordeIzqCentro = xRendirse + radioGrande + separacionCentro;
     const bordeDerCentro = xConfirmar - radioGrande - separacionCentro;
     const anchoCentro = bordeDerCentro - bordeIzqCentro;
-    const pasoCentro = anchoCentro / 2;
+    const pasoCentro = anchoCentro / 3;
     const xHistorial = bordeIzqCentro + pasoCentro * 0.5;
     const xOcultar = bordeIzqCentro + pasoCentro * 1.5;
+    const xRivalVivo = bordeIzqCentro + pasoCentro * 2.5;
 
     const altoRect = Math.round(altoBarra * 0.42);
     const anchoRect = Math.round(Math.min(pasoCentro * 0.72, 280));
@@ -92,10 +105,12 @@ export default class GenerarInterfaz extends Phaser.Scene {
       rendirse: this._crearBotonRendirse(xRendirse, centroY, diamGrande),
       historial: this._crearBotonHistorial(xHistorial, centroY, anchoRect, altoRect),
       ignorarInterfaz: this._crearBotonIgnorarInterfaz(xOcultar, centroY, diamOcultar),
+      rivalVivo: this._crearBotonRivalVivo(xRivalVivo, centroY, anchoRect, altoRect),
       confirmar: this._crearBotonConfirmar(xConfirmar, centroY, diamGrande),
     };
 
     Object.values(this.botones).forEach((ctrl) => this.contenedorBarra.add(ctrl));
+    this.botones.rivalVivo.setVisible(false);
 
     this._desenlazarControles = enlazarControlesInterfaz(this, {
       eventos: this.eventos,
@@ -104,14 +119,36 @@ export default class GenerarInterfaz extends Phaser.Scene {
     });
 
     this._onFaseCambiada = (estadoRonda) => {
-      if (estadoRonda === 'esperandoRival') mostrarEsperaRival(this);
+      this._estadoRondaActual = estadoRonda;
+      if (estadoRonda === 'esperandoRival') {
+        mostrarEsperaRival(this, this._configModificable);
+      }
       else ocultarEsperaRival();
       this.actualizarPorFase(estadoRonda);
+      this._actualizarTemporizadorRivalVivo();
     };
     this.eventos?.on('faseCambiada', this._onFaseCambiada);
 
+    this._onConfigModificable = (valor) => {
+      this._configModificable = valor === true;
+      if (this._estadoRondaActual === 'esperandoRival') {
+        mostrarEsperaRival(this, this._configModificable);
+        this.actualizarPorFase(this._estadoRondaActual);
+      }
+    };
+    this.eventos?.on('configModificableCambiada', this._onConfigModificable);
+
+    this._onPreguntaRivalVivo = (datos) => this._mostrarPreguntaRivalVivo(datos);
+    this._onRivalVivoConfirmado = () => {
+      this._consultaRivalPendiente = false;
+      this._actualizarTemporizadorRivalVivo();
+    };
+    this.eventos?.on('preguntaRivalVivo', this._onPreguntaRivalVivo);
+    this.eventos?.on('rivalVivoConfirmado', this._onRivalVivoConfirmado);
+
     this._onBatallaTerminada = (payload) => {
       ocultarEsperaRival();
+      this._limpiarComprobacionRival();
       this._bloqueadoPorEspera = false;
       mostrarFinalidad(this, {
         ...payload,
@@ -123,6 +160,7 @@ export default class GenerarInterfaz extends Phaser.Scene {
     registrarTodosLosFramesTexto(this);
     this.eventos?.on('abrirPanel', this._alAbrirPanel, this);
     this._registrarAtajos();
+    this._actualizarTemporizadorRivalVivo();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
   }
 
@@ -155,11 +193,69 @@ export default class GenerarInterfaz extends Phaser.Scene {
     this.contenedorBarra.add(rayado);
   }
 
-  _emitirEvento(nombreEvento) {
-    if (this._bloqueadoPorEspera && (nombreEvento === 'confirmar' || nombreEvento === 'rendirse' || nombreEvento === 'historial')) {
+  _emitirEvento(nombreEvento, payload) {
+    if (this._overlayRivalVivo && nombreEvento !== 'responderRivalVivo') return;
+    if (this._bloqueadoPorEspera && (nombreEvento === 'rendirse' || nombreEvento === 'historial')) {
       return;
     }
-    if (this.eventos) this.eventos.emit(nombreEvento);
+    if (
+      this._bloqueadoPorEspera
+      && nombreEvento === 'confirmar'
+      && !this._configModificable
+    ) return;
+    if (nombreEvento === 'preguntarRivalVivo') {
+      if (
+        this._estadoRondaActual !== 'seleccionando'
+        || this._consultaRivalPendiente
+        || !this.botones?.rivalVivo?.visible
+      ) return;
+      this._consultaRivalPendiente = true;
+      this.botones.rivalVivo.setVisible(false);
+      this._cancelarTemporizadorRivalVivo();
+    }
+    if (this.eventos) this.eventos.emit(nombreEvento, payload);
+  }
+
+  _cancelarTemporizadorRivalVivo() {
+    this._temporizadorRivalVivo?.remove?.(false);
+    this._temporizadorRivalVivo = null;
+  }
+
+  _actualizarTemporizadorRivalVivo() {
+    this._cancelarTemporizadorRivalVivo();
+    this.botones?.rivalVivo?.setVisible(false);
+    if (
+      !this._puedeComprobarRival
+      || this._consultaRivalPendiente
+      || this._estadoRondaActual !== 'seleccionando'
+    ) return;
+    this._temporizadorRivalVivo = this.time.delayedCall(TIEMPO_HASTA_BOTON_VIDA, () => {
+      this._temporizadorRivalVivo = null;
+      if (this._estadoRondaActual === 'seleccionando' && !this._consultaRivalPendiente) {
+        this.botones?.rivalVivo?.setVisible(true);
+      }
+    });
+  }
+
+  _mostrarPreguntaRivalVivo(datos) {
+    this._cancelarTemporizadorRivalVivo();
+    this.botones?.rivalVivo?.setVisible(false);
+    this._overlayRivalVivo?.cerrar?.();
+    this._overlayRivalVivo = mostrarConfirmacionVida(this, {
+      ...datos,
+      onResponder: (id) => {
+        this._overlayRivalVivo = null;
+        this._emitirEvento('responderRivalVivo', { id });
+        this._actualizarTemporizadorRivalVivo();
+      },
+    });
+  }
+
+  _limpiarComprobacionRival() {
+    this._cancelarTemporizadorRivalVivo();
+    this._overlayRivalVivo?.cerrar?.();
+    this._overlayRivalVivo = null;
+    this.botones?.rivalVivo?.setVisible(false);
   }
 
   _setBotonHabilitado(container, habilitado) {
@@ -178,10 +274,14 @@ export default class GenerarInterfaz extends Phaser.Scene {
     const esperando = estadoRonda === 'esperandoRival';
     const escudo = estadoRonda === 'escudo';
     this._bloqueadoPorEspera = esperando;
-    this._setBotonHabilitado(this.botones?.confirmar, !esperando && !escudo);
+    this._setBotonHabilitado(
+      this.botones?.confirmar,
+      !escudo && (!esperando || this._configModificable),
+    );
     this._setBotonHabilitado(this.botones?.rendirse, !esperando);
     this._setBotonHabilitado(this.botones?.historial, !esperando);
     this._setBotonHabilitado(this.botones?.ignorarInterfaz, true);
+    this._setBotonHabilitado(this.botones?.rivalVivo, !esperando && !escudo);
   }
 
   _crearControlCircular(x, y, radio, texto, nombreEvento, atajo) {
@@ -286,6 +386,18 @@ export default class GenerarInterfaz extends Phaser.Scene {
     return this._crearControlCircular(x, y, diametro / 2, 'Ocultar', 'ignorarInterfaz', 'o');
   }
 
+  _crearBotonRivalVivo(x, y, ancho, alto) {
+    return this._crearControlRectangular(
+      x,
+      y,
+      ancho,
+      alto,
+      '¿Rival vivo?',
+      'preguntarRivalVivo',
+      null,
+    );
+  }
+
   _registrarAtajos() {
     const teclado = this.input.keyboard;
     if (!teclado) return;
@@ -308,8 +420,12 @@ export default class GenerarInterfaz extends Phaser.Scene {
   shutdown() {
     this.eventos?.off('abrirPanel', this._alAbrirPanel, this);
     this.eventos?.off('faseCambiada', this._onFaseCambiada);
+    this.eventos?.off('configModificableCambiada', this._onConfigModificable);
+    this.eventos?.off('preguntaRivalVivo', this._onPreguntaRivalVivo);
+    this.eventos?.off('rivalVivoConfirmado', this._onRivalVivoConfirmado);
     this.eventos?.off('batallaTerminada', this._onBatallaTerminada);
     ocultarEsperaRival();
+    this._limpiarComprobacionRival();
     this.panelEntidadActivo?.cerrar?.();
     this._desenlazarControles?.();
     this._desenlazarControles = null;

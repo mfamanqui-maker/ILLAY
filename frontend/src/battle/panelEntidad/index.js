@@ -31,6 +31,7 @@ export {
   LADO_DERECHO,
   LISTAS,
   claveTexturaImagen,
+  etiquetaPanel,
   obtenerDescripcion,
   ICONO_FALLBACK,
   CLAVE_ICONO_FALLBACK,

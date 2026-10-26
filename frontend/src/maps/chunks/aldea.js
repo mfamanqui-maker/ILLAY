@@ -21,12 +21,26 @@ const IMAGEN_POR_NOMBRE = {
   tiendas: "tienda"
 };
 
+const RADIO_BATALLA = 80;
+
+const ZONAS_INTERIOR = [
+  { id: 13, color: 0xb44dff, mensaje: "entrando a la tienda" },
+  { id: 9, color: 0x3ddc6a, mensaje: "entrando a la casa" }
+];
+
 const MAPAS = [
   {
     clave: "inicio",
     ruta: "assets/maps/aldea/inicio.tmj",
     puntoEntrada: 8,
-    puntoInicio: 9
+    puntoInicio: 9,
+    puntosBatalla: [10, 11, 12],
+    imagenes: {
+      trees: "arbolesInicio",
+      casas: "decoracion",
+      casa: "casaInicio",
+      fence: "fence"
+    }
   },
   {
     clave: "central",
@@ -37,12 +51,48 @@ const MAPAS = [
     clave: "oculta",
     ruta: "assets/maps/aldea/aldeaOcultaEntreElPantano.tmj",
     puntoEntrada: 8
+  },
+  {
+    clave: "urcobo",
+    ruta: "assets/maps/aldea/urcobo.tmj",
+    puntoEntrada: 13,
+    puntosBatalla: [14, 15, 16],
+    imagenes: {
+      trees: "arbolesInicio",
+      decorativos: "decoracion",
+      casa: "casaInicio",
+      fence: "fence"
+    }
   }
 ];
+
+const VALLA = {
+  columns: 16,
+  image: "assets/images/maps/fence_medieval.png",
+  imageheight: 1024,
+  imagewidth: 512,
+  margin: 0,
+  name: "fence",
+  spacing: 0,
+  tilecount: 512,
+  tileheight: 32,
+  tilewidth: 32
+};
+
+function empotrarValla(json) {
+  if (!json?.tilesets) return;
+
+  json.tilesets = json.tilesets.map(tileset => {
+    const externo = typeof tileset.source === "string" && tileset.source.includes("fence_medieval");
+    if (!externo) return tileset;
+    return { ...VALLA, firstgid: tileset.firstgid ?? 4784 };
+  });
+}
 
 export function claveInterior(nombreAldea) {
   if (nombreAldea === "central") return "central";
   if (nombreAldea === "oeste") return "oculta";
+  if (nombreAldea === "noreste") return "urcobo";
   return "inicio";
 }
 
@@ -52,6 +102,10 @@ export default class Aldea {
     scene.load.image("exterior", "assets/images/maps/Exterior.png");
     scene.load.image("tienda", "assets/images/maps/1.png");
     scene.load.image("casas", "assets/images/maps/spritesheet%20(5).png");
+    scene.load.image("arbolesInicio", "assets/images/maps/trees_01%20(1).png");
+    scene.load.image("decoracion", "assets/images/maps/decorations-medieval.png");
+    scene.load.image("casaInicio", "assets/images/maps/spritesheet%20(5)%20(1).png");
+    scene.load.image("fence", "assets/images/maps/fence_medieval.png");
 
     for (const mapa of MAPAS) {
       scene.load.tilemapTiledJSON(mapa.clave, mapa.ruta);
@@ -73,12 +127,16 @@ export default class Aldea {
   }
 
   crear(definicion) {
+    const cache = this.scene.cache.tilemap.get(definicion.clave);
+    if (cache?.data) empotrarValla(cache.data);
+
     const mapa = this.scene.make.tilemap({ key: definicion.clave });
     const nombres = mapa.tilesets.map(tileset => tileset.name);
     const tilesets = [];
 
     for (const nombre of nombres) {
-      const imagen = IMAGEN_POR_NOMBRE[nombre.trim().toLowerCase()];
+      const limpio = nombre.trim().toLowerCase();
+      const imagen = definicion.imagenes?.[limpio] ?? IMAGEN_POR_NOMBRE[limpio];
       if (!imagen) {
         throw new Error(`[Aldea] El tileset "${nombre}" no tiene imagen.`);
       }
@@ -110,6 +168,53 @@ export default class Aldea {
     }
 
     this.mapas.set(definicion.clave, { definicion, mapa, capas, puntos });
+  }
+
+  mapaActivo() {
+    return this.mapas.get(this.activa)?.mapa ?? null;
+  }
+
+  puntosBatalla() {
+    const registro = this.mapas.get(this.activa);
+    if (!registro) return [];
+
+    return (registro.definicion.puntosBatalla ?? [])
+      .map(id => registro.puntos.get(id))
+      .filter(Boolean);
+  }
+
+  zonasInterior() {
+    const registro = this.mapas.get(this.activa);
+    if (!registro) return [];
+
+    return ZONAS_INTERIOR
+      .filter(zona => zona.id !== registro.definicion.puntoEntrada)
+      .map(zona => {
+        const punto = registro.puntos.get(zona.id);
+        if (!punto) return null;
+        return { x: punto.x, y: punto.y, color: zona.color, mensaje: zona.mensaje };
+      })
+      .filter(Boolean);
+  }
+
+  zonaInteriorCercana(jugador) {
+    if (!jugador) return null;
+
+    return this.zonasInterior().find(zona => {
+      const dx = jugador.x - zona.x;
+      const dy = jugador.y - zona.y;
+      return dx * dx + dy * dy <= RADIO_BATALLA * RADIO_BATALLA;
+    }) ?? null;
+  }
+
+  puntoBatallaCercano(jugador) {
+    if (!jugador) return null;
+
+    return this.puntosBatalla().find(punto => {
+      const dx = jugador.x - punto.x;
+      const dy = jugador.y - punto.y;
+      return dx * dx + dy * dy <= RADIO_BATALLA * RADIO_BATALLA;
+    }) ?? null;
   }
 
   punto(clave, id) {

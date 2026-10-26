@@ -4,18 +4,18 @@
  *
  * Lee del cache de JSON cargado en preload (DESCRIPCIONES en config).
  * Si no hay descripción registrada para el nombre, fallback es:
- *   "(SIN DESCRIPCION)"
+ *   "(sin descripción)"
  */
 
 import { crearTexto } from '../GenerarTexto/index.js';
-import { DEPTHS, LADO_IZQUIERDO, obtenerDescripcion } from '../panelEntidadConfig.js';
+import { DEPTHS, LADO_IZQUIERDO, etiquetaPanel, obtenerDescripcion } from '../panelEntidadConfig.js';
 import { crearCajaMarron } from './cajaMarron.js';
 
 const TEXTO_INICIAL = LADO_IZQUIERDO.tooltipTitulo;
-const TEXTO_FALLBACK = '(SIN DESCRIPCION)';
+const TEXTO_FALLBACK = '(sin descripción)';
 
 function partirTextoPorAncho(textoOriginal, anchoMax, opciones) {
-  const palabras = String(textoOriginal ?? '').toUpperCase().split(/\s+/).filter(Boolean);
+  const palabras = String(textoOriginal ?? '').split(/\s+/).filter(Boolean);
   if (palabras.length === 0) return '';
 
   const { medirTexto, estilo, escala } = opciones;
@@ -81,11 +81,12 @@ export function crearTooltipDescripcion(scene, opciones) {
         dibujar(TEXTO_INICIAL);
         return;
       }
+      const visible = etiquetaPanel(nombreItem);
       const desc = obtenerDescripcion(scene, clave, nombreItem);
       if (desc) {
-        dibujar(`${nombreItem}: ${desc}`);
+        dibujar(`${visible}: ${desc}`);
       } else {
-        dibujar(`${nombreItem}\n${TEXTO_FALLBACK}`);
+        dibujar(`${visible}\n${TEXTO_FALLBACK}`);
       }
     },
 

@@ -4,6 +4,7 @@ const wss = new WebSocketServer({ host: '0.0.0.0', port: PUERTO });
 console.log(`WebSocket listo en ws://localhost:${PUERTO} (ngrok apunta a este puerto)`);
 
 const TIEMPO_MAXIMO_COLA = 20000;
+const TIEMPO_RESPUESTA_VIDA = 5000;
 
 const rooms = new Map();
 const cola = [];
@@ -13,6 +14,8 @@ const DESPACHADOR = {
     Buscar_Partida: buscarPartida,
     Enviar_Config_Acciones: (ws, data) => reenviarConfig(ws, data, false),
     Enviar_Config_Acciones_Final: (ws, data) => reenviarConfig(ws, data, true),
+    Preguntar_Rival_Vivo: preguntarRivalVivo,
+    Responder_Rival_Vivo: responderRivalVivo,
     Partida_Finalizada: finalizarPartida,
 };
 
@@ -75,32 +78,185 @@ function agotarCola(esperando) {
     enviar(esperando.user, 'Partida_No_Encontrada', null);
 }
 
+function estadoJugada() {
+    return {
+        configuracion: null,
+        modificable: true,
+        bloqueada: false,
+        finalizado: false,
+        solicitaRival: false,
+    };
+}
+
+function normalizarJugada(data, ronda) {
+    if (Array.isArray(data)) {
+        return { configuracion: data, modificable: true, ronda };
+    }
+    return {
+        configuracion: data?.configuracion,
+        modificable: data?.modificable === true,
+        ronda: Number(data?.ronda),
+        solicitudId: data?.solicitudId ?? null,
+        bloquearRival: data?.bloquearRival === true,
+    };
+}
+
+function esConfigEstable(estado) {
+    return Array.isArray(estado?.configuracion);
+}
+
+function confirmarCambio(ws, jugada, aceptada, motivo = null) {
+    enviar(ws, 'Estado_Config_Acciones', {
+        solicitudId: jugada.solicitudId,
+        ronda: jugada.ronda,
+        aceptada,
+        modificable: aceptada,
+        estado: aceptada ? 'cambiante' : 'invariable',
+        ...(motivo ? { motivo } : {}),
+    });
+}
+
+function marcarCambiante(room, ws, yo, jugada) {
+    const estado = room.jugadas[yo.clave];
+    if (jugada.ronda !== room.ronda) {
+        confirmarCambio(ws, jugada, false, 'ronda_cerrada');
+        return;
+    }
+    if (!estado.modificable || estado.bloqueada) {
+        confirmarCambio(ws, jugada, false, 'jugada_invariable');
+        return;
+    }
+    estado.configuracion = 'cambiante';
+    estado.finalizado = false;
+    estado.solicitaRival = false;
+    room.entregas = { jugadorA: null, jugadorB: null };
+    confirmarCambio(ws, jugada, true);
+}
+
+function bloquearRivalSiHaceFalta(room, clave) {
+    const yo = room.jugadas[clave];
+    const otraClave = clave === 'jugadorA' ? 'jugadorB' : 'jugadorA';
+    const rival = room.jugadas[otraClave];
+    if (!yo.solicitaRival || !esConfigEstable(yo) || !esConfigEstable(rival)) return;
+    rival.bloqueada = true;
+    rival.modificable = false;
+}
+
+function firmaEntrega(rival, propio) {
+    return JSON.stringify([
+        rival.configuracion,
+        rival.modificable,
+        rival.finalizado,
+        propio.modificable,
+    ]);
+}
+
+function entregarJugada(room, receptor, rival) {
+    const propia = room.jugadas[receptor.clave];
+    const ajena = room.jugadas[rival.clave];
+    const firma = firmaEntrega(ajena, propia);
+    if (room.entregas[receptor.clave] === firma) return;
+    room.entregas[receptor.clave] = firma;
+    enviar(
+        receptor.user,
+        ajena.finalizado ? 'Recibir_Config_Acciones_Final' : 'Recibir_Config_Acciones',
+        {
+            configuracion: ajena.configuracion,
+            modificable: ajena.modificable,
+            propiaModificable: propia.modificable,
+            ronda: room.ronda,
+        },
+    );
+}
+
+function resolverIntercambio(room) {
+    const [a, b] = room.miembros;
+    const estadoA = room.jugadas.jugadorA;
+    const estadoB = room.jugadas.jugadorB;
+    if (!esConfigEstable(estadoA) || !esConfigEstable(estadoB)) return;
+
+    bloquearRivalSiHaceFalta(room, 'jugadorA');
+    bloquearRivalSiHaceFalta(room, 'jugadorB');
+    entregarJugada(room, a, b);
+    entregarJugada(room, b, a);
+
+    if (estadoA.finalizado && estadoB.finalizado) resetearRonda(room);
+}
+
 /**
- * Siempre al cable. Quien ya nego (type1) esta en recibirConfigDelRival:
- * si guardamos el Recibir en un buzon de sala, no hay segundo flush y
- * se queda esperando para siempre. Quien aun no escucha lo recoge el
- * buzon del cliente (coneccion.js), no este servidor.
+ * Cada jugada es `{ configuracion, modificable, ronda }`.
+ * `configuracion: "cambiante"` se acepta solo mientras el servidor conserve
+ * `modificable: true`. Una peticion tipo 1 bloquea atomicamente al rival.
  */
-function reenviarConfig(ws, configuracion, esFinal) {
+function reenviarConfig(ws, data, esFinal) {
     const room = salaDe(ws);
     if (!room || room.status !== 'open') return;
 
     const yo = miembroDe(room, ws);
+    if (!yo) return;
+    const jugada = normalizarJugada(data, room.ronda);
+    if (jugada.configuracion === 'cambiante') {
+        marcarCambiante(room, ws, yo, jugada);
+        return;
+    }
+    if (jugada.ronda !== room.ronda || !Array.isArray(jugada.configuracion)) return;
+
+    const estado = room.jugadas[yo.clave];
+    estado.configuracion = jugada.configuracion;
+    estado.modificable = estado.bloqueada ? false : jugada.modificable;
+    estado.finalizado = Boolean(esFinal);
+    estado.solicitaRival = !esFinal || jugada.bloquearRival;
+    resolverIntercambio(room);
+}
+
+function preguntarRivalVivo(ws) {
+    const room = salaDe(ws);
+    if (!room || room.status !== 'open') return;
+    if (room.desafioVida) {
+        enviar(ws, 'Rival_Vivo_Confirmado', { ocupado: true });
+        return;
+    }
+    const yo = miembroDe(room, ws);
     const rival = rivalDe(room, ws);
     if (!yo || !rival) return;
 
-    room.configuraciones[yo.clave] = configuracion;
-    room.finalizado[yo.clave] = Boolean(esFinal);
+    const id = crypto.randomUUID();
+    const idTemporizador = setTimeout(() => agotarRespuestaVida(room, id), TIEMPO_RESPUESTA_VIDA);
+    room.desafioVida = {
+        id,
+        solicitante: yo.clave,
+        consultado: rival.clave,
+        idTemporizador,
+    };
+    enviar(rival.user, 'Preguntar_Rival_Vivo', {
+        id,
+        tiempoMaximo: TIEMPO_RESPUESTA_VIDA,
+    });
+}
 
-    enviar(
-        rival.user,
-        esFinal ? 'Recibir_Config_Acciones_Final' : 'Recibir_Config_Acciones',
-        configuracion,
-    );
+function responderRivalVivo(ws, data) {
+    const room = salaDe(ws);
+    const desafio = room?.desafioVida;
+    const yo = room ? miembroDe(room, ws) : null;
+    if (!room || !desafio || !yo) return;
+    if (desafio.id !== data?.id || desafio.consultado !== yo.clave) return;
 
-    if (room.finalizado.jugadorA && room.finalizado.jugadorB) {
-        resetearRonda(room);
+    clearTimeout(desafio.idTemporizador);
+    const solicitante = room.miembros.find((m) => m.clave === desafio.solicitante);
+    room.desafioVida = null;
+    if (solicitante) {
+        enviar(solicitante.user, 'Rival_Vivo_Confirmado', { id: desafio.id });
     }
+}
+
+function agotarRespuestaVida(room, id) {
+    const desafio = room?.desafioVida;
+    if (!desafio || desafio.id !== id || room.status !== 'open') return;
+    const solicitante = room.miembros.find((m) => m.clave === desafio.solicitante);
+    const consultado = room.miembros.find((m) => m.clave === desafio.consultado);
+    if (solicitante) enviar(solicitante.user, 'Resultado_Partida', 'victoria');
+    if (consultado) enviar(consultado.user, 'Resultado_Partida', 'derrota');
+    cerrarSala(room);
 }
 
 /**
@@ -163,8 +319,9 @@ function crearSala(miembros) {
             { ...miembros[1], clave: 'jugadorB' },
         ],
         ronda: 1,
-        configuraciones: { jugadorA: null, jugadorB: null },
-        finalizado: { jugadorA: false, jugadorB: false },
+        jugadas: { jugadorA: estadoJugada(), jugadorB: estadoJugada() },
+        entregas: { jugadorA: null, jugadorB: null },
+        desafioVida: null,
         declaraciones: { jugadorA: null, jugadorB: null },
         status: 'open',
     };
@@ -188,11 +345,15 @@ function avisarPartidaEncontrada(room) {
 
 function resetearRonda(room) {
     room.ronda += 1;
-    room.configuraciones = { jugadorA: null, jugadorB: null };
-    room.finalizado = { jugadorA: false, jugadorB: false };
+    room.jugadas = { jugadorA: estadoJugada(), jugadorB: estadoJugada() };
+    room.entregas = { jugadorA: null, jugadorB: null };
 }
 
 function cerrarSala(room) {
+    if (room.desafioVida?.idTemporizador) {
+        clearTimeout(room.desafioVida.idTemporizador);
+    }
+    room.desafioVida = null;
     room.status = 'cerrada';
     rooms.delete(room.id);
 }
@@ -259,7 +420,14 @@ function estadoServidor() {
             id: r.id,
             miembros: r.miembros.length,
             ronda: r.ronda,
-            finalizado: r.finalizado,
+            jugadas: Object.fromEntries(Object.entries(r.jugadas).map(([clave, j]) => [
+                clave,
+                {
+                    estado: Array.isArray(j.configuracion) ? 'estable' : j.configuracion,
+                    modificable: j.modificable,
+                    finalizado: j.finalizado,
+                },
+            ])),
             status: r.status,
         })),
         socketsVivos: wss.clients.size,

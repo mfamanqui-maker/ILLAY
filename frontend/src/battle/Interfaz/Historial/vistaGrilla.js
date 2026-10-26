@@ -36,7 +36,7 @@ export function crearVistaGrilla(scene, padre, opciones) {
   raiz.add(btnRegresar);
   const lblReg = scene.add.text(ancho - 110, 48, 'REGRESAR', {
     fontFamily: 'Arial',
-    fontSize: 20,
+    fontSize: 16,
     color: '#e8c547',
     padding: { x: 4, y: 2 },
   });
@@ -81,7 +81,7 @@ export function crearVistaGrilla(scene, padre, opciones) {
 
     const lbl = scene.add.text(celdaAncho / 2, celdaAlto / 2 - 14, leyenda, {
       fontFamily: 'Arial',
-      fontSize: 22,
+      fontSize: 18,
       color: COLOR_TEXTO,
       padding: { x: 6, y: 4 },
     });
@@ -91,7 +91,7 @@ export function crearVistaGrilla(scene, padre, opciones) {
 
     const sub = scene.add.text(celdaAncho / 2, celdaAlto / 2 + 18, detalle, {
       fontFamily: 'Arial',
-      fontSize: 16,
+      fontSize: 13,
       color: '#bdbdbd',
       padding: { x: 6, y: 4 },
     });

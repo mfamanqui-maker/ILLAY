@@ -1,21 +1,16 @@
 /**
- * Estilos de texto pixel.
+ * Estilos de texto del panel.
  *
- * Solo se usa la fuente ASCII de `text.png` (panel). Cada carácter ocupa una
- * celda fija en una rejilla de 16 columnas; el frame se calcula por código ASCII.
- *
- * `tint` se cuece en el canvas (source-atop): el PNG es un único color sobre
- * transparente, teñir a negro lo oscurece por completo. No se usa setOrigin
- * fraccionario sobre la imagen: el ancla se aplica desplazando en píxeles.
+ * Verdana (Arial de respaldo) para que las letras se lean al encoger
+ * el canvas. Solo lo usa crearTexto del panelEntidad.
  */
+
+export const FUENTE_UI = 'Verdana, Arial, sans-serif';
+
 export const ESTILOS_TEXTO = {
   panel: {
-    textura: 'panelText',
-    archivo: 'assets/images/battle/panel/text.png',
-    modo: 'ascii',
-    columnas: 16,
-    anchoCelda: 10,
-    altoCelda: 12,
-    tint: 0x000000,
+    fuente: FUENTE_UI,
+    color: '#1a1208',
+    peso: 'bold',
   },
 };

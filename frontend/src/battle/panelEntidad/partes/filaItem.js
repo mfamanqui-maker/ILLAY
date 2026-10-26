@@ -10,6 +10,7 @@ import {
   LISTAS,
   ICONO_FALLBACK,
   CLAVE_ICONO_FALLBACK,
+  etiquetaPanel,
 } from '../panelEntidadConfig.js';
 import { resolverIcono } from '../../datosDePotestades/iconosAtlas.js';
 
@@ -79,7 +80,7 @@ export function crearFilaItem(scene, opciones) {
   colocarIcono(scene, container, item, marcoX + marcoTam / 2, marcoY + marcoTam / 2);
 
   const textoX = marcoX + marcoTam + LISTAS.gapIconoTexto;
-  const nombre = crearTexto(scene, String(item?.nombre ?? ''), {
+  const nombre = crearTexto(scene, etiquetaPanel(item?.nombre), {
     x: textoX,
     y: altoFila / 2,
     estilo: LISTAS.textoEstilo,
